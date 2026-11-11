@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="マイプラン">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1f1f1f" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<title>マイプラン</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-tab="cal">
+
+<header class="topbar">
+  <button id="todayBtn" class="pill" type="button">今日</button>
+  <button id="prevBtn" class="icon" type="button" aria-label="前の月"><svg viewBox="0 0 24 24"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>
+  <button id="nextBtn" class="icon" type="button" aria-label="次の月"><svg viewBox="0 0 24 24"><path d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4 4.6 4.6z"/></svg></button>
+  <h1 id="monthTitle"></h1>
+  <span id="syncState" class="sync-state"></span>
+  <button id="reloadBtn" class="icon" type="button" aria-label="再読み込み"><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg></button>
+  <button id="settingsBtn" class="icon" type="button" aria-label="設定"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.9a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.9a7 7 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
+</header>
+
+<div id="demoBanner" class="banner" hidden>お試し表示中です。右上の設定からGoogleとつなぐと本番になります。</div>
+<div id="filters" class="filters"></div>
+
+<main class="layout">
+  <section id="calBox" class="cal-box">
+    <div class="weekdays"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+    <div id="grid" class="grid"></div>
+  </section>
+  <aside id="side" class="side">
+    <section id="agendaBox" class="agenda"></section>
+    <section id="summaryBox" class="summary"></section>
+  </aside>
+</main>
+
+<nav class="tabbar">
+  <button type="button" data-tab="cal"><svg viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14z"/></svg>カレンダー</button>
+  <button type="button" data-tab="sum"><svg viewBox="0 0 24 24"><path d="M5 9h3v11H5zm5.5-5h3v16h-3zM16 13h3v7h-3z"/></svg>まとめ</button>
+</nav>
+
+<button id="fab" class="fab" type="button" aria-label="予定を追加"><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+
+<!-- 予定の追加・編集 -->
+<dialog id="editor">
+  <form id="editForm" class="dlg">
+    <div class="dlg-head">
+      <button type="button" class="icon" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z"/></svg></button>
+      <h2 id="editTitle">予定を追加</h2>
+      <button type="submit" id="saveBtn" class="btn-primary">保存</button>
+    </div>
+    <div class="dlg-body">
+      <input id="fTitle" class="title-input" placeholder="タイトル（空欄なら自動でつけます）" autocomplete="off">
+
+      <div class="seg" id="fType">
+        <button type="button" data-v="run">ラン</button>
+        <button type="button" data-v="study">勉強</button>
+        <button type="button" data-v="money">資金</button>
+        <button type="button" data-v="other">その他</button>
+      </div>
+
+      <div class="field-row"><label for="fDate">日付</label><input type="date" id="fDate" required></div>
+      <div class="field-row"><label for="fAllDay">終日</label><input type="checkbox" id="fAllDay" class="switch"></div>
+      <div class="field-row" id="timeRow"><label>時間</label><span class="time-pair"><input type="time" id="fStart"><span>〜</span><input type="time" id="fEnd"></span></div>
+
+      <div class="type-fields" data-type="run">
+        <div class="field-row"><label for="fDist">距離</label><span class="unit"><input type="number" id="fDist" inputmode="decimal" step="0.1" min="0" placeholder="0"> km</span></div>
+        <div class="field-row"><label>タイム</label><span class="unit"><input type="number" id="fMin" inputmode="numeric" min="0" placeholder="0"> 分 <input type="number" id="fSec" inputmode="numeric" min="0" max="59" placeholder="0"> 秒</span></div>
+        <div class="field-row"><label>ペース</label><span id="fPace" class="muted">—</span></div>
+      </div>
+      <div class="type-fields" data-type="study">
+        <div class="field-row"><label for="fSubject">資格・科目</label><input id="fSubject" list="subjects" placeholder="例：簿記2級" autocomplete="off"></div>
+        <datalist id="subjects"></datalist>
+        <div class="field-row"><label for="fStudyMin">勉強時間</label><span class="unit"><input type="number" id="fStudyMin" inputmode="numeric" min="0" placeholder="0"> 分</span></div>
+      </div>
+      <div class="type-fields" data-type="money">
+        <div class="field-row"><label for="fKind">区分</label><select id="fKind"><option value="in">積み立て（＋）</option><option value="out">取り崩し（−）</option></select></div>
+        <div class="field-row"><label for="fAmount">金額</label><span class="unit"><input type="number" id="fAmount" inputmode="numeric" min="0" placeholder="0"> 円</span></div>
+      </div>
+
+      <div class="field-row"><label for="fDone" id="doneLabel">実施済み</label><input type="checkbox" id="fDone" class="switch"></div>
+      <textarea id="fMemo" rows="3" placeholder="メモ"></textarea>
+
+      <div class="sync-title">Googleカレンダーへの同期</div>
+      <div class="sync-opts" id="fSync">
+        <label class="sync-opt"><input type="radio" name="sync" value="none"><span><b>アプリだけ</b><small>このアプリにだけ残す</small></span></label>
+        <label class="sync-opt"><input type="radio" name="sync" value="mine"><span><b>自分のカレンダー</b><small id="mineDesc">自分専用のカレンダーに入れる（妻には見えない）</small></span></label>
+        <label class="sync-opt"><input type="radio" name="sync" value="shared"><span><b>夫婦の共有カレンダー</b><small id="sharedDesc">妻と共有しているカレンダーに入れる</small></span></label>
+      </div>
+
+      <button type="button" id="delBtn" class="btn-danger">この予定を削除</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 共有カレンダーの予定（見るだけ） -->
+<dialog id="detail">
+  <div class="dlg">
+    <div class="dlg-head">
+      <button type="button" class="icon" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z"/></svg></button>
+      <h2>予定の詳細</h2><span></span>
+    </div>
+    <div class="dlg-body" id="detailBody"></div>
+  </div>
+</dialog>
+
+<!-- 設定 -->
+<dialog id="settings">
+  <form id="settingsForm" class="dlg">
+    <div class="dlg-head">
+      <button type="button" class="icon" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z"/></svg></button>
+      <h2>設定</h2>
+      <button type="submit" class="btn-primary">保存</button>
+    </div>
+    <div class="dlg-body">
+      <h3 class="sec">Googleとの接続</h3>
+      <div class="field-col"><label for="sUrl">接続先URL（Apps ScriptのURL）</label><input id="sUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></div>
+      <div class="field-col"><label for="sToken">合言葉</label><input id="sToken" autocomplete="off" placeholder="セットアップで表示された合言葉"></div>
+      <div class="test-row"><button type="button" id="testBtn" class="btn-outline">接続テスト</button><span id="testMsg" class="muted"></span></div>
+      <div class="field-col"><label for="sShared">夫婦の共有カレンダー</label><select id="sShared"><option value="">（まだ選んでいません）</option></select></div>
+
+      <h3 class="sec">ランの目標</h3>
+      <div class="field-row"><label for="sRunGoal">月間距離</label><span class="unit"><input id="sRunGoal" type="number" inputmode="decimal" min="0"> km</span></div>
+
+      <h3 class="sec">勉強の目標</h3>
+      <div class="field-row"><label for="sExamName">試験名</label><input id="sExamName" placeholder="例：簿記2級"></div>
+      <div class="field-row"><label for="sExamDate">試験日</label><input id="sExamDate" type="date"></div>
+      <div class="field-row"><label for="sStudyGoal">月間勉強時間</label><span class="unit"><input id="sStudyGoal" type="number" inputmode="numeric" min="0"> 時間</span></div>
+
+      <h3 class="sec">資金の目標</h3>
+      <div class="field-row"><label for="sFundName">目標名</label><input id="sFundName" placeholder="例：Mac mini"></div>
+      <div class="field-row"><label for="sFundGoal">目標額</label><span class="unit"><input id="sFundGoal" type="number" inputmode="numeric" min="0"> 円</span></div>
+      <div class="field-row"><label for="sFundDate">期限</label><input id="sFundDate" type="date"></div>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>
