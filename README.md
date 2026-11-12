@@ -72,7 +72,7 @@ SafariでアプリのURLを開き、共有ボタン →「ホーム画面に追�
 `widget/myplan-widget.js` を、無料アプリ「Scriptable」で動かすと、今日の予定と今月のまとめ（ラン・勉強・資金）をウィジェットで表示できます。小・中・大の3サイズに対応、明るい／暗い表示にも自動で対応します。
 
 1. App Storeで「Scriptable」を入れる
-2. iPhoneのSafariで https://raw.githubusercontent.com/nakazu210/my-plan/main/widget/myplan-widget.js を開き、全文をコピー
+2. iPhoneで https://nakazu210.github.io/my-plan/widget.html を開き（アプリの設定画面からも開ける）、「プログラムをコピー」を押す
 3. Scriptableで右上の「＋」→ 貼り付け → 上の題名を「マイプラン」にして「Done」
 4. 「マイプラン」をタップして実行 → 接続先URL（/exec）と合言葉（setup の実行ログに出たもの）を入力
 5. ホーム画面を長押し →「＋」→ Scriptable のウィジェットを置く → 長押し「ウィジェットを編集」→ Script で「マイプラン」を選ぶ
