@@ -94,7 +94,9 @@ function entriesFor(data, day) {
   });
   data.events.forEach(ev => {
     if (day < ev.date || day > (ev.endDate || ev.date)) return;
-    out.push({ start: ev.allDay ? '' : ev.start, title: ev.title, color: EXT_COLOR, done: false, ext: true });
+    const st = data.settings || {};
+    const color = ev.byMe === false ? (st.colorWife || '#E67C73') : (st.colorMe || '#3F51B5');
+    out.push({ start: ev.allDay ? '' : ev.start, title: ev.title, color, done: false, ext: true });
   });
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
@@ -164,7 +166,7 @@ function entryList(stack, list, max, size) {
     const row = stack.addStack();
     row.centerAlignContent();
     row.spacing = 4;
-    text(row, e.ext ? '○' : '●', size - 4, new Color(e.color));
+    text(row, '●', size - 4, new Color(e.color));
     text(row, e.start || '終日', size - 2, C.fg2);
     const t = text(row, (e.done ? '✓' : '') + e.title, size, C.fg);
     if (e.done) t.textOpacity = 0.6;
