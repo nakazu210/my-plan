@@ -227,7 +227,26 @@ async function build(family) {
     w.addSpacer(2);
     const img = w.addImage(barImage(s.run.goal ? s.run.value / s.run.goal : 0, CATS.run.color, 120, 5));
     img.imageSize = new Size(120, 5);
-  } else if (family === 'large' || family === 'extraLarge') {
+  } else if (family === 'extraLarge' || family === 'extraLargePortrait') {
+    // 特大（iPhone Duo を開いたときなど）：今日から3日分の予定＋今月のまとめ
+    for (let k = 0; k < 3; k++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k);
+      if (k > 0) {
+        w.addSpacer(8);
+        text(w, ['', '明日', 'あさって'][k] + ' ' + (d.getMonth() + 1) + '/' + d.getDate() + '（' + WD[d.getDay()] + '）', 13, C.fg2, 'bold');
+        w.addSpacer(4);
+      }
+      entryList(w, entriesFor(data, ymd(d)), k === 0 ? 5 : 3, 14);
+    }
+    w.addSpacer();
+    text(w, (now.getMonth() + 1) + '月のまとめ', 13, C.fg2, 'bold');
+    w.addSpacer(6);
+    sumRows(w, s, 300, 13);
+    if (s.study.examDays != null && s.study.examDays >= 0) {
+      w.addSpacer(8);
+      text(w, s.study.exam + 'まで あと' + s.study.examDays + '日', 12, C.fg2);
+    }
+  } else if (family === 'large') {
     entryList(w, today, 5, 13);
     w.addSpacer(8);
     const tmr = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -295,13 +314,18 @@ async function main() {
   m.addAction('プレビュー（中）');
   m.addAction('プレビュー（小）');
   m.addAction('プレビュー（大）');
+  m.addAction('プレビュー（特大）');
   m.addAction('接続を設定し直す');
   m.addCancelAction('閉じる');
   const i = await m.presentSheet();
   if (i === 0) await (await build('medium')).presentMedium();
   if (i === 1) await (await build('small')).presentSmall();
   if (i === 2) await (await build('large')).presentLarge();
-  if (i === 3) await setupConnection();
+  if (i === 3) {
+    const xl = await build('extraLarge');
+    if (typeof xl.presentExtraLarge === 'function') await xl.presentExtraLarge(); else await xl.presentLarge();
+  }
+  if (i === 4) await setupConnection();
 }
 
 await main();
