@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-180.png">
 <title>マイプラン</title>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 <script>try{var t=localStorage.getItem("mp_theme");t=t&&JSON.parse(t);if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body data-tab="cal">
@@ -35,7 +35,13 @@
 <main class="layout">
   <section id="calBox" class="cal-box">
     <div class="weekdays"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
-    <div id="grid" class="grid"></div>
+    <div id="viewport" class="viewport">
+      <div id="track" class="track">
+        <div id="gridPrev" class="grid" aria-hidden="true"></div>
+        <div id="grid" class="grid"></div>
+        <div id="gridNext" class="grid" aria-hidden="true"></div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -194,7 +200,7 @@
 </div>
 
 <div id="toast" class="toast" role="status"></div>
-<script src="config.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

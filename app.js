@@ -321,7 +321,7 @@ function calDesc(it) {
   return lines.join('\n');
 }
 
-function entriesByDay() {
+function entriesByDay(events = state.events) {
   const out = {};
   const add = (k, e) => { (out[k] = out[k] || []).push(e); };
   state.items.forEach(it => {
@@ -329,7 +329,7 @@ function entriesByDay() {
     add(it.date, { kind: 'item', it, id: it.id, start: it.start, end: it.end, title: titleOf(it), color: CATS[it.type].color, done: it.done });
   });
   {
-    state.events.forEach(ev => {
+    events.forEach(ev => {
       if (!state.filters[ev.byMe ? 'extMe' : 'extWife']) return;
       let d = parse(ev.date);
       const end = parse(ev.endDate || ev.date);
@@ -348,7 +348,10 @@ function render() {
   $('#demoBanner').hidden = !isDemo();
   renderFilters();
   const map = entriesByDay();
-  renderGrid(map);
+  renderGrid(map, state.view, $('#grid'));
+  const pv = new Date(f.getFullYear(), f.getMonth() - 1, 1), nv = new Date(f.getFullYear(), f.getMonth() + 1, 1);
+  renderGrid(entriesByDay(evCache[monthKey(pv)] || []), pv, $('#gridPrev'));
+  renderGrid(entriesByDay(evCache[monthKey(nv)] || []), nv, $('#gridNext'));
   if ($('#day').open) renderAgenda(map);
   if ($('#sumDlg').open) renderSummary();
 }
@@ -373,15 +376,17 @@ function chipHtml(e) {
     (e.start ? `<span class="t">${esc(e.start)}</span>` : '') + (e.done ? '✓' : '') + esc(e.title) + '</button>';
 }
 
-function renderGrid(map) {
-  const { f, start, weeks } = monthGrid();
+function renderGrid(map, view, el) {
+  const f = view;
+  const start = addDays(f, -f.getDay());
+  const weeks = Math.ceil((f.getDay() + new Date(f.getFullYear(), f.getMonth() + 1, 0).getDate()) / 7);
   const today = ymd(new Date());
   // マスの高さから、表示できる予定の数を計算（カレンダーを画面いっぱいに使う）
   const gridH = $('#grid').clientHeight || 500;
   const cellH = gridH / weeks;
   const chipH = isWide() ? 20 : 17;
   const max = Math.max(1, Math.floor((cellH - (isWide() ? 32 : 28)) / chipH));
-  $('#grid').style.setProperty('--weeks', weeks);
+  el.style.setProperty('--weeks', weeks);
   let h = '';
   for (let i = 0; i < weeks * 7; i++) {
     const d = addDays(start, i), k = ymd(d), list = map[k] || [];
@@ -396,7 +401,7 @@ function renderGrid(map) {
     if (list.length > shown) h += `<span class="more">他${list.length - shown}件</span>`;
     h += '</div>';
   }
-  $('#grid').innerHTML = h;
+  el.innerHTML = h;
 }
 
 function timeText(e) {
@@ -720,11 +725,6 @@ async function saveSettings(ev) {
     toast('保存できませんでした：' + e.message);
     return;
   }
-  const g = $('#grid');
-  g.classList.remove('slide-l', 'slide-r');
-  void g.offsetWidth;
-  g.classList.add(n > 0 ? 'slide-l' : 'slide-r');
-  if (!evCache[monthKey(state.view)]) state.events = [];
   render();
   load();
 }
@@ -747,8 +747,36 @@ function moveMonth(n) {
     const today = new Date();
     state.sel = today.getMonth() === state.view.getMonth() && today.getFullYear() === state.view.getFullYear() ? ymd(today) : ymd(state.view);
   }
+  state.events = evCache[monthKey(state.view)] || [];
   render();
   load();
+}
+
+/* カレンダーごと横に動かす（Googleカレンダー風） */
+let sliding = false;
+function setTrack(px, animate) {
+  const t = $('#track');
+  t.style.transition = animate ? 'transform .28s cubic-bezier(.2,.7,.3,1)' : 'none';
+  t.style.transform = `translateX(calc(-100% / 3 + ${px}px))`;
+}
+function slideTo(n) {
+  if (sliding) return;
+  if (!n) { setTrack(0, true); return; }
+  sliding = true;
+  const w = $('#viewport').clientWidth;
+  setTrack(n > 0 ? -w : w, true);
+  const t = $('#track');
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    t.removeEventListener('transitionend', finish);
+    moveMonth(n);
+    setTrack(0, false);
+    sliding = false;
+  };
+  t.addEventListener('transitionend', finish);
+  setTimeout(finish, 400);
 }
 function openDay() {
   render();
@@ -761,8 +789,8 @@ function openEntry(kind, id) {
 }
 
 function bind() {
-  $('#prevBtn').onclick = () => moveMonth(-1);
-  $('#nextBtn').onclick = () => moveMonth(1);
+  $('#prevBtn').onclick = () => slideTo(-1);
+  $('#nextBtn').onclick = () => slideTo(1);
   $('#todayBtn').onclick = () => {
     const t = new Date();
     state.sel = ymd(t);
@@ -803,19 +831,35 @@ function bind() {
   let resizeTimer;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 120); });
   $('#sumBtn').onclick = () => { renderSummary(); $('#sumDlg').showModal(); };
-  // 左右にスワイプして月を切り替える
-  let sx = 0, sy = 0, st = 0, swiping = false;
-  const grid = $('#grid');
-  grid.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now(); swiping = true; }, { passive: true });
-  grid.addEventListener('touchend', e => {
-    if (!swiping) return;
-    swiping = false;
-    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - st < 800) {
-      swipedAt = Date.now();
-      moveMonth(dx < 0 ? 1 : -1);
-    }
+  // 左右にスワイプして月を切り替える（指に合わせてカレンダーごと動く）
+  const vp = $('#viewport');
+  let sx = 0, sy = 0, st = 0, mode = '', dx = 0;
+  vp.addEventListener('touchstart', e => {
+    if (sliding || e.touches.length > 1) return;
+    const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now(); mode = 'wait'; dx = 0;
   }, { passive: true });
+  vp.addEventListener('touchmove', e => {
+    if (!mode) return;
+    const t = e.touches[0], mx = t.clientX - sx, my = t.clientY - sy;
+    if (mode === 'wait') {
+      if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      mode = Math.abs(mx) > Math.abs(my) ? 'drag' : '';
+      if (!mode) return;
+    }
+    e.preventDefault();
+    dx = mx;
+    setTrack(dx, false);
+  }, { passive: false });
+  const endDrag = () => {
+    if (mode !== 'drag') { mode = ''; return; }
+    mode = '';
+    swipedAt = Date.now();
+    const w = vp.clientWidth, v = Math.abs(dx) / Math.max(1, Date.now() - st);
+    if (Math.abs(dx) > w * 0.25 || (v > 0.35 && Math.abs(dx) > 30)) slideTo(dx < 0 ? 1 : -1);
+    else slideTo(0);
+  };
+  vp.addEventListener('touchend', endDrag, { passive: true });
+  vp.addEventListener('touchcancel', endDrag, { passive: true });
 
   // 入力画面
   $('#editForm').onsubmit = saveEditor;

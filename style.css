@@ -256,10 +256,8 @@ details.backup summary { font-size: 13px; color: var(--fg2); cursor: pointer; pa
 .color-label { font-size: 14px; color: var(--fg2); margin-top: 10px; display: flex; align-items: center; gap: 8px; }
 .color-label i { width: 12px; height: 12px; border-radius: 3px; background: var(--c); }
 
-/* ---- スワイプで月を切り替えるときの動き ---- */
-.grid { touch-action: pan-y; }
-.grid.slide-l { animation: slideL .22s ease-out; }
-.grid.slide-r { animation: slideR .22s ease-out; }
-@keyframes slideL { from { transform: translateX(40px); opacity: .3; } to { transform: none; opacity: 1; } }
-@keyframes slideR { from { transform: translateX(-40px); opacity: .3; } to { transform: none; opacity: 1; } }
+/* ---- 月の切り替え：前・今・次の3か月を横に並べ、指に合わせて動かす ---- */
 .cal-box { overflow: hidden; }
+.viewport { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: pan-y; }
+.track { display: flex; width: 300%; height: 100%; transform: translateX(-33.3333%); will-change: transform; }
+.track > .grid { flex: 0 0 33.3333%; width: 33.3333%; height: 100%; }
