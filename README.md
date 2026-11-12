@@ -66,3 +66,17 @@ Googleカレンダーの「ラン計画」「勉強計画」「資金計画」�
 ## iPhoneのホーム画面に置く
 
 SafariでアプリのURLを開き、共有ボタン →「ホーム画面に追加」。
+
+## ホーム画面ウィジェット（Scriptable）
+
+`widget/myplan-widget.js` を、無料アプリ「Scriptable」で動かすと、今日の予定と今月のまとめ（ラン・勉強・資金）をウィジェットで表示できます。小・中・大の3サイズに対応、明るい／暗い表示にも自動で対応します。
+
+1. App Storeで「Scriptable」を入れる
+2. iPhoneのSafariで https://raw.githubusercontent.com/nakazu210/my-plan/main/widget/myplan-widget.js を開き、全文をコピー
+3. Scriptableで右上の「＋」→ 貼り付け → 上の題名を「マイプラン」にして「Done」
+4. 「マイプラン」をタップして実行 → 接続先URL（/exec）と合言葉（setup の実行ログに出たもの）を入力
+5. ホーム画面を長押し →「＋」→ Scriptable のウィジェットを置く → 長押し「ウィジェットを編集」→ Script で「マイプラン」を選ぶ
+
+- URLと合言葉はiPhoneのキーチェーン（安全な保管場所）にだけ保存され、プログラムには書かれません
+- 更新はおよそ30分ごと（iPhoneの判断で前後します）。通信できないときは前回の情報を表示します
+- タップするとマイプランが開きます
