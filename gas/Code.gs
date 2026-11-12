@@ -6,6 +6,9 @@
  * 初回だけ：エディタ上部の関数選択で「setup」を選んで実行 → 実行ログに合言葉が出ます
  */
 
+// Googleログイン用のクライアントID（Google Cloudで作成したもの。秘密の情報ではありません）
+const CLIENT_ID = '';
+
 const HEADERS = ['id', 'type', 'title', 'date', 'start', 'end', 'memo', 'data', 'sync', 'eventId', 'calId', 'done', 'updated'];
 const CAT_NAMES = { run: 'ラン計画', study: '勉強計画', money: '資金計画', other: 'マイプラン' };
 
@@ -32,14 +35,75 @@ function doPost(e) {
   let res;
   try {
     const req = JSON.parse(e.postData.contents);
-    if (!req.token || req.token !== P_().getProperty('TOKEN')) throw new Error('合言葉が違います');
-    const fn = { config: config_, list: list_, save: save_, remove: remove_, settings: saveSettings_ }[req.action];
+    if (req.action === 'login') {
+      res = { ok: true, result: login_(req) };
+      return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
+    }
+    auth_(req);
+    const fn = { config: config_, list: list_, save: save_, remove: remove_, settings: saveSettings_, logout: logout_ }[req.action];
     if (!fn) throw new Error('不明な操作です：' + req.action);
     res = { ok: true, result: fn(req) };
   } catch (err) {
     res = { ok: false, error: String((err && err.message) || err) };
   }
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ---------- ログイン ---------- */
+
+function hash_(s) {
+  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8));
+}
+function sessions_() { return JSON.parse(P_().getProperty('SESSIONS') || '{}'); }
+
+/** Googleでログイン → この端末用のログインキーを発行（端末ごとに1回だけ） */
+function login_(req) {
+  const cid = CLIENT_ID || P_().getProperty('CLIENT_ID');
+  if (!cid) throw new Error('GoogleログインのクライアントIDが未設定です');
+  if (!req.idToken) throw new Error('ログイン情報がありません');
+  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(req.idToken), { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('Googleログインを確認できませんでした');
+  const t = JSON.parse(r.getContentText());
+  if (t.aud !== cid) throw new Error('ログイン情報が正しくありません');
+  if (String(t.email_verified) !== 'true') throw new Error('メールアドレスが確認されていないアカウントです');
+  const allowed = [Session.getEffectiveUser().getEmail()]
+    .concat((P_().getProperty('ALLOWED_EMAILS') || '').split(','))
+    .map(s => String(s).trim().toLowerCase()).filter(Boolean);
+  if (allowed.indexOf(String(t.email).toLowerCase()) < 0) throw new Error('このGoogleアカウントでは使えません（' + t.email + '）');
+
+  const key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = sessions_();
+    ss[hash_(key)] = { email: t.email, at: new Date().toISOString() };
+    const keys = Object.keys(ss).sort((a, b) => (ss[a].at < ss[b].at ? -1 : 1));
+    while (keys.length > 20) delete ss[keys.shift()]; // 古い端末から順に整理
+    P_().setProperty('SESSIONS', JSON.stringify(ss));
+  } finally {
+    lock.releaseLock();
+  }
+  return { session: key, email: t.email, name: t.name || '' };
+}
+
+function auth_(req) {
+  if (req.session && sessions_()[hash_(req.session)]) return;
+  const token = P_().getProperty('TOKEN');
+  if (req.token && token && req.token === token) return; // 予備の合言葉
+  throw new Error('LOGIN_REQUIRED');
+}
+
+function logout_(req) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = sessions_();
+    if (req.session) delete ss[hash_(req.session)];
+    P_().setProperty('SESSIONS', JSON.stringify(ss));
+  } finally {
+    lock.releaseLock();
+  }
+  return true;
 }
 
 /* ---------- 設定 ---------- */
@@ -67,21 +131,86 @@ function saveSettings_(req) {
 /* ---------- 一覧 ---------- */
 
 function list_(req) {
-  const items = readAll_().map(r => r.obj);
   const events = [];
-  const sid = P_().getProperty('SHARED_CAL');
-  if (sid && req.from && req.to) {
-    const cal = CalendarApp.getCalendarById(sid);
+  if (!req.from || !req.to) return { items: readAll_().map(r => r.obj), events: events };
+  const from = parseDate_(req.from), to = addDays_(parseDate_(req.to), 1);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const rows = readAll_();
+    const byEvent = {};
+    rows.forEach(r => { if (r.obj.eventId) byEvent[r.obj.eventId] = r; });
+
+    // 1) 自分のカレンダー（ラン計画など）に直接入った予定を取り込む／時間の変更を反映
+    Object.keys(CAT_NAMES).forEach(type => {
+      const id = P_().getProperty('CAL_' + type);
+      const cal = id && CalendarApp.getCalendarById(id);
+      if (!cal) return;
+      cal.getEvents(from, to).forEach(ev => {
+        const linked = byEvent[ev.getId()];
+        if (linked) { syncBack_(linked, ev); return; }
+        if (ev.isRecurringEvent()) return; // 繰り返し予定は取り込まない
+        const it = importEvent_(ev, type, id);
+        writeRow_(0, it);
+        byEvent[it.eventId] = { row: -1, obj: it };
+        rows.push({ row: -1, obj: it });
+      });
+    });
+
+    // 2) 夫婦の共有カレンダー：アプリの予定は時間の変更を反映、それ以外は「見るだけ」で表示
+    const sid = P_().getProperty('SHARED_CAL');
+    const cal = sid && CalendarApp.getCalendarById(sid);
     if (cal) {
-      const mine = {};
-      items.forEach(i => { if (i.eventId) mine[i.eventId] = 1; });
-      cal.getEvents(parseDate_(req.from), addDays_(parseDate_(req.to), 1)).forEach(ev => {
-        if (mine[ev.getId()]) return; // アプリから入れた予定は二重に出さない
+      cal.getEvents(from, to).forEach(ev => {
+        const linked = byEvent[ev.getId()];
+        if (linked) { syncBack_(linked, ev); return; }
         events.push(evToObj_(ev, cal.getName()));
       });
     }
+    return { items: rows.map(r => r.obj), events: events };
+  } finally {
+    lock.releaseLock();
   }
-  return { items: items, events: events };
+}
+
+/** Googleカレンダー側で日時が変わっていたら、アプリにも反映 */
+function syncBack_(r, ev) {
+  if (r.row < 0) return;
+  const o = evToObj_(ev, '');
+  const it = r.obj;
+  if (it.date === o.date && it.start === o.start && it.end === o.end) return;
+  it.date = o.date; it.start = o.start; it.end = o.end;
+  it.updated = new Date().toISOString();
+  writeRow_(r.row, it);
+}
+
+/** カレンダーの予定をアプリの予定に変換（タイトルから距離・時間・金額を読み取る） */
+function importEvent_(ev, type, calId) {
+  const o = evToObj_(ev, '');
+  let title = o.title;
+  let done = false;
+  if (/^[✓✔]\s*/.test(title)) { done = true; title = title.replace(/^[✓✔]\s*/, ''); }
+  const memo = String(o.memo || '').replace(/\n*（マイプランから登録）\s*$/, '');
+  const text = title + ' ' + memo;
+  const toNum = s => Number(String(s).replace(/[，,]/g, '').replace(/[０-９．]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)));
+  const data = {};
+  let m;
+  if (type === 'run') {
+    if ((m = text.match(/([0-9０-９.．]+)\s*(km|ｋｍ|キロ)/i))) data.dist = toNum(m[1]);
+  } else if (type === 'study') {
+    if ((m = text.match(/([0-9０-９.．]+)\s*時間/))) data.min = Math.round(toNum(m[1]) * 60);
+    if ((m = text.match(/([0-9０-９]+)\s*分/))) data.min = (data.min || 0) + toNum(m[1]);
+    const subj = title.replace(/[0-9０-９.．]+\s*(時間|分)/g, '').replace(/勉強/g, '').trim();
+    if (subj) data.subject = subj;
+  } else if (type === 'money') {
+    if ((m = text.match(/([0-9０-９,，]+)\s*円/))) data.amount = toNum(m[1]);
+    data.kind = /取り崩し|引き出し|出金|−|-/.test(title) ? 'out' : 'in';
+  }
+  return {
+    id: Utilities.getUuid(), type: type, title: title, date: o.date, start: o.start, end: o.end,
+    memo: memo, data: data, sync: 'mine', eventId: ev.getId(), calId: calId, done: done,
+    updated: new Date().toISOString(),
+  };
 }
 
 function evToObj_(ev, calName) {

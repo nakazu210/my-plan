@@ -2,11 +2,12 @@
 /* マイプラン — ラン・勉強・資金の計画カレンダー（Googleカレンダー連携） */
 
 const CATS = {
+  other: { label: 'その他', color: '#8E24AA', done: '完了' },
   run:   { label: 'ラン',   color: '#0B8043', done: '走った（記録として残す）' },
   study: { label: '勉強',   color: '#039BE5', done: '勉強した（記録として残す）' },
   money: { label: '資金',   color: '#F4511E', done: '入金済み（記録として残す）' },
-  other: { label: 'その他', color: '#8E24AA', done: '完了' },
 };
+const MPC = window.MP_CONFIG || {};
 const EXT_COLOR = '#616161';
 const SYNC_LABEL = { none: 'アプリのみ', mine: '自分', shared: '共有' };
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
@@ -30,30 +31,106 @@ const LS = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 保存できなくても動かす */ } },
 };
 
+function loadCfg() {
+  const saved = LS.get('mp_cfg', {}) || {};
+  return { apiUrl: saved.apiUrl || MPC.apiUrl || '', token: saved.token || '' };
+}
+
 const state = {
-  cfg: LS.get('mp_cfg', { apiUrl: '', token: '' }),
+  cfg: loadCfg(),
+  session: LS.get('mp_session', null), // { key, email, name }
+  demoForced: false,
   view: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   sel: ymd(new Date()),
   items: [], events: [], settings: {}, calendars: [], sharedCalId: '',
   filters: LS.get('mp_filters', { run: true, study: true, money: true, other: true, ext: true }),
   editing: null,
 };
-const isDemo = () => !state.cfg.apiUrl;
+const isDemo = () => !state.cfg.apiUrl || state.demoForced;
+const needsLogin = () => !!state.cfg.apiUrl && !state.demoForced && !state.session && !state.cfg.token;
 const cacheKey = () => 'mp_cache_' + (isDemo() ? 'demo' : 'live');
 
 /* ---------- 通信 ---------- */
 async function api(action, payload = {}, cfg = state.cfg) {
-  if (!cfg.apiUrl) return demoApi(action, payload);
+  if (!cfg.apiUrl || (state.demoForced && cfg === state.cfg)) return demoApi(action, payload);
+  const body = Object.assign({ action, token: cfg.token, session: state.session ? state.session.key : '' }, payload);
   const res = await fetch(cfg.apiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(Object.assign({ action, token: cfg.token }, payload)),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('通信エラー（' + res.status + '）');
   let j;
   try { j = await res.json(); } catch (e) { throw new Error('接続先URLが正しくないようです'); }
-  if (!j.ok) throw new Error(j.error || '不明なエラー');
+  if (!j.ok) {
+    if (j.error === 'LOGIN_REQUIRED') {
+      state.session = null;
+      LS.set('mp_session', null);
+      if (cfg === state.cfg) showLogin();
+      throw new Error('ログインが必要です');
+    }
+    throw new Error(j.error || '不明なエラー');
+  }
   return j.result;
+}
+
+/* ---------- Googleログイン ---------- */
+let gsiLoaded = null;
+function loadGsi() {
+  if (!gsiLoaded) {
+    gsiLoaded = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://accounts.google.com/gsi/client';
+      sc.async = true;
+      sc.onload = resolve;
+      sc.onerror = () => reject(new Error('Googleのログイン部品を読み込めませんでした'));
+      document.head.appendChild(sc);
+    });
+  }
+  return gsiLoaded;
+}
+async function showLogin() {
+  $('#login').hidden = false;
+  $('#loginMsg').textContent = '';
+  if (!MPC.clientId) { $('#loginMsg').textContent = 'Googleログインの準備がまだです（クライアントID未設定）'; return; }
+  try {
+    await loadGsi();
+    google.accounts.id.initialize({ client_id: MPC.clientId, callback: onGoogleCredential, auto_select: false, ux_mode: 'popup' });
+    $('#gsiBtn').innerHTML = '';
+    google.accounts.id.renderButton($('#gsiBtn'), { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'ja', width: 280 });
+  } catch (e) {
+    $('#loginMsg').textContent = e.message;
+  }
+}
+async function onGoogleCredential(resp) {
+  $('#loginMsg').textContent = 'ログイン中…';
+  try {
+    const r = await api('login', { idToken: resp.credential });
+    state.session = { key: r.session, email: r.email, name: r.name };
+    LS.set('mp_session', state.session);
+    $('#login').hidden = true;
+    toast(r.email + ' でログインしました');
+    await loadConfig();
+    await load();
+  } catch (e) {
+    $('#loginMsg').textContent = 'ログインできませんでした：' + e.message;
+  }
+}
+async function logout() {
+  if (!confirm('この端末からログアウトしますか？')) return;
+  try { await api('logout', {}); } catch (e) { /* ログアウトはそのまま進める */ }
+  state.session = null;
+  LS.set('mp_session', null);
+  $('#settings').close();
+  showLogin();
+}
+
+/* ---------- 色のテーマ ---------- */
+function applyTheme(v) {
+  const root = document.documentElement;
+  if (v === 'light' || v === 'dark') root.dataset.theme = v; else delete root.dataset.theme;
+  const dark = v === 'dark' || (v !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $$('meta[name=theme-color]').forEach(m => { m.content = dark ? '#1f1f1f' : '#ffffff'; });
 }
 
 /* お試し表示（Google未接続のとき）。データはこの端末の中だけ */
@@ -370,7 +447,7 @@ function renderSummary() {
 
 /* ---------- 予定の入力 ---------- */
 function defaultSync(type) {
-  const s = LS.get('mp_sync_' + type, type === 'other' ? 'shared' : 'mine');
+  const s = LS.get('mp_sync_' + type, 'mine');
   return s === 'shared' && !sharedAvailable() ? 'mine' : s;
 }
 const sharedAvailable = () => isDemo() || !!state.sharedCalId;
@@ -379,7 +456,7 @@ function openEditor(it, date) {
   if (it) {
     state.editing = JSON.parse(JSON.stringify(it));
   } else {
-    const type = LS.get('mp_lastType', 'run');
+    const type = 'other'; // 新しい予定は「その他」から始める
     state.editing = { type, date: date || state.sel, title: '', start: '', end: '', memo: '', data: {}, done: date ? date < ymd(new Date()) : false, sync: defaultSync(type) };
   }
   const e = state.editing;
@@ -460,7 +537,6 @@ async function saveEditor(ev) {
     const i = state.items.findIndex(x => x.id === saved.id);
     if (i >= 0) state.items[i] = saved; else state.items.push(saved);
     LS.set('mp_sync_' + it.type, it.sync);
-    LS.set('mp_lastType', it.type);
     LS.set(cacheKey(), { items: state.items, settings: state.settings });
     state.sel = saved.date;
     const sd = parse(saved.date);
@@ -518,6 +594,10 @@ function fillSharedSelect() {
 }
 function openSettings() {
   const s = state.settings || {};
+  $('#sTheme').value = LS.get('mp_theme', 'auto');
+  $('#accountName').textContent = isDemo() ? 'お試し表示中（未ログイン）'
+    : state.session ? state.session.email : state.cfg.token ? '予備の合言葉で接続中' : '未ログイン';
+  $('#logoutBtn').hidden = isDemo() || !state.session;
   $('#sUrl').value = state.cfg.apiUrl || '';
   $('#sToken').value = state.cfg.token || '';
   $('#testMsg').textContent = '';
@@ -554,7 +634,12 @@ async function saveSettings(ev) {
     studyGoal: $('#sStudyGoal').value, fundName: $('#sFundName').value.trim(), fundGoal: $('#sFundGoal').value, fundDate: $('#sFundDate').value,
   };
   state.cfg = newCfg;
-  LS.set('mp_cfg', newCfg);
+  LS.set('mp_cfg', { apiUrl: newCfg.apiUrl === MPC.apiUrl ? '' : newCfg.apiUrl, token: newCfg.token });
+  if (changed) {
+    state.demoForced = false;
+    state.items = (LS.get(cacheKey(), {}).items) || [];
+    if (needsLogin()) { $('#settings').close(); render(); showLogin(); return; }
+  }
   try {
     applyConfig(await api('settings', { settings, sharedCalId: $('#sShared').value }));
     $('#settings').close();
@@ -563,7 +648,6 @@ async function saveSettings(ev) {
     toast('保存できませんでした：' + e.message);
     return;
   }
-  if (changed) { state.items = (LS.get(cacheKey(), {}).items) || []; }
   render();
   load();
 }
@@ -643,6 +727,15 @@ function bind() {
   };
   $('#delBtn').onclick = deleteItem;
   $('#settingsForm').onsubmit = saveSettings;
+  $('#sTheme').onchange = () => { LS.set('mp_theme', $('#sTheme').value); applyTheme($('#sTheme').value); };
+  $('#logoutBtn').onclick = logout;
+  $('#demoBtn').onclick = () => {
+    state.demoForced = true;
+    $('#login').hidden = true;
+    state.items = (LS.get(cacheKey(), {}).items) || [];
+    loadConfig().then(load);
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(LS.get('mp_theme', 'auto')));
   $('#testBtn').onclick = testConnection;
   $$('[data-close]').forEach(b => { b.onclick = () => b.closest('dialog').close(); });
   $$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
@@ -654,9 +747,11 @@ function bind() {
 
 async function init() {
   bind();
+  applyTheme(LS.get('mp_theme', 'auto'));
   const cache = LS.get(cacheKey(), null);
   if (cache) { state.items = cache.items || []; state.settings = cache.settings || {}; }
   render();
+  if (needsLogin()) { showLogin(); return; }
   await loadConfig();
   await load();
 }

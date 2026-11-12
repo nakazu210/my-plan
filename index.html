@@ -14,6 +14,7 @@
 <link rel="icon" href="icon-180.png">
 <title>マイプラン</title>
 <link rel="stylesheet" href="style.css">
+<script>try{var t=localStorage.getItem("mp_theme");t=t&&JSON.parse(t);if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body data-tab="cal">
 
@@ -27,7 +28,7 @@
   <button id="settingsBtn" class="icon" type="button" aria-label="設定"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.9a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.9a7 7 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
 </header>
 
-<div id="demoBanner" class="banner" hidden>お試し表示中です。右上の設定からGoogleとつなぐと本番になります。</div>
+<div id="demoBanner" class="banner" hidden>お試し表示中です（見本のデータです）。</div>
 <div id="filters" class="filters"></div>
 
 <main class="layout">
@@ -57,13 +58,13 @@
       <button type="submit" id="saveBtn" class="btn-primary">保存</button>
     </div>
     <div class="dlg-body">
-      <input id="fTitle" class="title-input" placeholder="タイトル（空欄なら自動でつけます）" autocomplete="off">
+      <input id="fTitle" class="title-input" placeholder="タイトル" autocomplete="off">
 
       <div class="seg" id="fType">
+        <button type="button" data-v="other">その他</button>
         <button type="button" data-v="run">ラン</button>
         <button type="button" data-v="study">勉強</button>
         <button type="button" data-v="money">資金</button>
-        <button type="button" data-v="other">その他</button>
       </div>
 
       <div class="field-row"><label for="fDate">日付</label><input type="date" id="fDate" required></div>
@@ -120,10 +121,11 @@
       <button type="submit" class="btn-primary">保存</button>
     </div>
     <div class="dlg-body">
-      <h3 class="sec">Googleとの接続</h3>
-      <div class="field-col"><label for="sUrl">接続先URL（Apps ScriptのURL）</label><input id="sUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></div>
-      <div class="field-col"><label for="sToken">合言葉</label><input id="sToken" autocomplete="off" placeholder="セットアップで表示された合言葉"></div>
-      <div class="test-row"><button type="button" id="testBtn" class="btn-outline">接続テスト</button><span id="testMsg" class="muted"></span></div>
+      <h3 class="sec">表示</h3>
+      <div class="field-row"><label for="sTheme">色のテーマ</label><select id="sTheme"><option value="auto">自動（iPhoneの設定に合わせる）</option><option value="light">ライト</option><option value="dark">ダーク</option></select></div>
+
+      <h3 class="sec">アカウント</h3>
+      <div class="account-row"><span id="accountName">—</span><button type="button" id="logoutBtn" class="btn-outline">ログアウト</button></div>
       <div class="field-col"><label for="sShared">夫婦の共有カレンダー</label><select id="sShared"><option value="">（まだ選んでいません）</option></select></div>
 
       <h3 class="sec">ランの目標</h3>
@@ -138,11 +140,30 @@
       <div class="field-row"><label for="sFundName">目標名</label><input id="sFundName" placeholder="例：Mac mini"></div>
       <div class="field-row"><label for="sFundGoal">目標額</label><span class="unit"><input id="sFundGoal" type="number" inputmode="numeric" min="0"> 円</span></div>
       <div class="field-row"><label for="sFundDate">期限</label><input id="sFundDate" type="date"></div>
+
+      <details class="backup">
+        <summary>接続の詳細設定（ふだんは使いません）</summary>
+        <div class="field-col"><label for="sUrl">接続先URL（Apps ScriptのURL）</label><input id="sUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></div>
+        <div class="field-col"><label for="sToken">予備の合言葉（Googleログインが使えないとき）</label><input id="sToken" autocomplete="off"></div>
+        <div class="test-row"><button type="button" id="testBtn" class="btn-outline">接続テスト</button><span id="testMsg" class="muted"></span></div>
+      </details>
     </div>
   </form>
 </dialog>
 
+<div id="login" class="login" hidden>
+  <div class="login-box">
+    <img src="icon-180.png" alt="">
+    <h2>マイプラン</h2>
+    <p>Googleアカウントでログインしてください。<br>この端末では、次回からログイン不要です。</p>
+    <div id="gsiBtn"></div>
+    <div id="loginMsg" class="login-msg"></div>
+    <button type="button" id="demoBtn" class="link-btn">ログインせずにお試し表示で見る</button>
+  </div>
+</div>
+
 <div id="toast" class="toast" role="status"></div>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
