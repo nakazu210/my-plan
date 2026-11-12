@@ -206,24 +206,67 @@ function monthGrid() {
   return { f, start, weeks, end: addDays(start, weeks * 7 - 1) };
 }
 
+/* 月ごとの予定（共有カレンダー分）を覚えておき、月を変えたらすぐ表示 → 裏で最新に更新 */
+const monthKey = d => d.getFullYear() + '-' + pad(d.getMonth() + 1);
+const evCacheKey = () => 'mp_evcache_' + (isDemo() ? 'demo' : 'live');
+let evCache = LS.get(evCacheKey(), {}) || {};
+function gridRange(view) {
+  const start = addDays(view, -view.getDay());
+  const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+  const weeks = Math.ceil((view.getDay() + days) / 7);
+  return { from: ymd(start), to: ymd(addDays(start, weeks * 7 - 1)) };
+}
+function resetEvCache(clear) {
+  evCache = clear ? {} : (LS.get(evCacheKey(), {}) || {});
+  if (clear) LS.set(evCacheKey(), {});
+}
+function saveEvCache() {
+  const keys = Object.keys(evCache).sort();
+  while (keys.length > 8) delete evCache[keys.shift()]; // 古い月から整理
+  LS.set(evCacheKey(), evCache);
+}
+
 let loadSeq = 0;
+const inflight = {};
+async function fetchMonth(view) {
+  const key = monthKey(view);
+  if (inflight[key]) return inflight[key];
+  const p = api('list', gridRange(view)).then(r => {
+    evCache[key] = r.events || [];
+    saveEvCache();
+    return r;
+  }).finally(() => { delete inflight[key]; });
+  inflight[key] = p;
+  return p;
+}
 async function load() {
   const seq = ++loadSeq;
-  const { start, end } = monthGrid();
-  setStatus('読み込み中…');
+  const view = state.view, key = monthKey(view);
+  if (evCache[key]) { state.events = evCache[key]; render(); }
+  setStatus(evCache[key] ? '更新中…' : '読み込み中…');
   try {
-    const r = await api('list', { from: ymd(start), to: ymd(end) });
-    if (seq !== loadSeq) return;
-    state.items = r.items || [];
-    state.events = r.events || [];
-    LS.set(cacheKey(), { items: state.items, settings: state.settings });
-    setStatus('');
+    const r = await fetchMonth(view);
+    if (seq === loadSeq) {
+      state.items = r.items || [];
+      state.events = r.events || [];
+      LS.set(cacheKey(), { items: state.items, settings: state.settings });
+      setStatus('');
+      render();
+    }
   } catch (e) {
     if (seq !== loadSeq) return;
     setStatus('未接続');
     toast('読み込めませんでした：' + e.message);
+    render();
+    return;
   }
-  render();
+  // 前後の月を先回りして読み込んでおく
+  if (seq === loadSeq && !isDemo()) {
+    [-1, 1].forEach(n => {
+      const v = new Date(view.getFullYear(), view.getMonth() + n, 1);
+      if (!evCache[monthKey(v)]) fetchMonth(v).catch(() => {});
+    });
+  }
 }
 
 async function loadConfig() {
@@ -307,7 +350,7 @@ function render() {
   const map = entriesByDay();
   renderGrid(map);
   if ($('#day').open) renderAgenda(map);
-  renderSummary();
+  if ($('#sumDlg').open) renderSummary();
 }
 
 function renderFilters() {
@@ -668,19 +711,27 @@ async function saveSettings(ev) {
     if (needsLogin()) { $('#settings').close(); render(); showLogin(); return; }
   }
   try {
+    const sharedChanged = $('#sShared').value !== state.sharedCalId;
     applyConfig(await api('settings', { settings, sharedCalId: $('#sShared').value }));
+    if (sharedChanged || changed) resetEvCache(true);
     $('#settings').close();
     toast('設定を保存しました');
   } catch (e) {
     toast('保存できませんでした：' + e.message);
     return;
   }
+  const g = $('#grid');
+  g.classList.remove('slide-l', 'slide-r');
+  void g.offsetWidth;
+  g.classList.add(n > 0 ? 'slide-l' : 'slide-r');
+  if (!evCache[monthKey(state.view)]) state.events = [];
   render();
   load();
 }
 
 /* ---------- 操作 ---------- */
 let toastTimer;
+let swipedAt = 0;
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
@@ -729,6 +780,7 @@ function bind() {
     render();
   };
   $('#grid').onclick = e => {
+    if (Date.now() - swipedAt < 400) return;
     const chip = e.target.closest('.chip');
     const cell = e.target.closest('.cell'); if (!cell) return;
     const date = cell.dataset.date;
@@ -750,7 +802,20 @@ function bind() {
   });
   let resizeTimer;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 120); });
-  $$('.tabbar button').forEach(b => { b.onclick = () => { document.body.dataset.tab = b.dataset.tab; window.scrollTo(0, 0); }; });
+  $('#sumBtn').onclick = () => { renderSummary(); $('#sumDlg').showModal(); };
+  // 左右にスワイプして月を切り替える
+  let sx = 0, sy = 0, st = 0, swiping = false;
+  const grid = $('#grid');
+  grid.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now(); swiping = true; }, { passive: true });
+  grid.addEventListener('touchend', e => {
+    if (!swiping) return;
+    swiping = false;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - st < 800) {
+      swipedAt = Date.now();
+      moveMonth(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
 
   // 入力画面
   $('#editForm').onsubmit = saveEditor;
@@ -784,6 +849,7 @@ function bind() {
   };
   $('#demoBtn').onclick = () => {
     state.demoForced = true;
+    resetEvCache();
     $('#login').hidden = true;
     state.items = (LS.get(cacheKey(), {}).items) || [];
     loadConfig().then(load);

@@ -78,11 +78,9 @@ svg { fill: currentColor; }
 html, body { width: 100%; height: 100%; }
 body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
 .topbar, .banner, .filters, .tabbar { flex: none; }
-.layout { flex: 1; min-height: 0; display: flex; flex-direction: column; width: 100%; }
+.layout { flex: 1; min-height: 0; display: flex; flex-direction: column; width: 100%; padding-bottom: env(safe-area-inset-bottom); }
 .cal-box { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.summary { display: none; flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 96px !important; }
-body[data-tab="sum"] .cal-box { display: none; }
-body[data-tab="sum"] .summary { display: block; }
+.summary { padding: 8px 0 !important; }
 
 /* ---- 月カレンダー ---- */
 .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: var(--fg2); padding: 2px 0 4px; }
@@ -149,7 +147,7 @@ body[data-tab="sum"] .summary { display: block; }
 .tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 0 6px; font-size: 11px; color: var(--fg2); }
 .tabbar svg { width: 22px; height: 22px; }
 body[data-tab="cal"] .tabbar [data-tab="cal"], body[data-tab="sum"] .tabbar [data-tab="sum"] { color: var(--blue); }
-.fab { position: fixed; right: 16px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 11; width: 56px; height: 56px; border-radius: 16px; background: var(--card); color: var(--blue); box-shadow: var(--shadow); display: grid; place-items: center; }
+.fab { position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 11; width: 56px; height: 56px; border-radius: 16px; background: var(--card); color: var(--blue); box-shadow: var(--shadow); display: grid; place-items: center; }
 .fab svg { width: 30px; height: 30px; }
 
 /* ---- 開いた画面（iPhone Duo など）：文字を大きく、まとめは横に並べる ---- */
@@ -158,7 +156,6 @@ body[data-tab="cal"] .tabbar [data-tab="cal"], body[data-tab="sum"] .tabbar [dat
   .num { font-size: 14px; width: 26px; height: 26px; line-height: 26px; }
   .weekdays { font-size: 13px; }
   .more { font-size: 11px; }
-  .summary { padding: 16px 20px !important; }
   .sum-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
   .sum-cards .card { margin: 0; }
 }
@@ -258,3 +255,11 @@ details.backup summary { font-size: 13px; color: var(--fg2); cursor: pointer; pa
 .swatch.on { border-color: var(--bg); box-shadow: 0 0 0 2px var(--c); }
 .color-label { font-size: 14px; color: var(--fg2); margin-top: 10px; display: flex; align-items: center; gap: 8px; }
 .color-label i { width: 12px; height: 12px; border-radius: 3px; background: var(--c); }
+
+/* ---- スワイプで月を切り替えるときの動き ---- */
+.grid { touch-action: pan-y; }
+.grid.slide-l { animation: slideL .22s ease-out; }
+.grid.slide-r { animation: slideR .22s ease-out; }
+@keyframes slideL { from { transform: translateX(40px); opacity: .3; } to { transform: none; opacity: 1; } }
+@keyframes slideR { from { transform: translateX(-40px); opacity: .3; } to { transform: none; opacity: 1; } }
+.cal-box { overflow: hidden; }
