@@ -161,10 +161,16 @@ function list_(req) {
     const sid = P_().getProperty('SHARED_CAL');
     const cal = sid && CalendarApp.getCalendarById(sid);
     if (cal) {
+      const me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
       cal.getEvents(from, to).forEach(ev => {
         const linked = byEvent[ev.getId()];
         if (linked) { syncBack_(linked, ev); return; }
-        events.push(evToObj_(ev, cal.getName()));
+        const o = evToObj_(ev, cal.getName());
+        // 誰が入れた予定か（自分／妻）で色を分けるため
+        let creators = [];
+        try { creators = ev.getCreators().map(c => String(c).toLowerCase()); } catch (e) { creators = []; }
+        o.byMe = !creators.length || creators.indexOf(me) >= 0;
+        events.push(o);
       });
     }
     return { items: rows.map(r => r.obj), events: events };

@@ -8,7 +8,9 @@ const CATS = {
   money: { label: '資金',   color: '#F4511E', done: '入金済み（記録として残す）' },
 };
 const MPC = window.MP_CONFIG || {};
-const EXT_COLOR = '#616161';
+const PALETTE = ['#D50000', '#E67C73', '#F4511E', '#F6BF26', '#33B679', '#0B8043', '#039BE5', '#3F51B5', '#7986CB', '#8E24AA', '#616161'];
+const DEF_ME = '#3F51B5', DEF_WIFE = '#E67C73';
+const extColor = byMe => (byMe ? state.settings.colorMe || DEF_ME : state.settings.colorWife || DEF_WIFE);
 const SYNC_LABEL = { none: 'アプリのみ', mine: '自分', shared: '共有' };
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -43,7 +45,7 @@ const state = {
   view: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   sel: ymd(new Date()),
   items: [], events: [], settings: {}, calendars: [], sharedCalId: '',
-  filters: LS.get('mp_filters', { run: true, study: true, money: true, other: true, ext: true }),
+  filters: Object.assign({ run: true, study: true, money: true, other: true, extMe: true, extWife: true }, LS.get('mp_filters', {})),
   editing: null,
 };
 const isDemo = () => !state.cfg.apiUrl || state.demoForced;
@@ -189,9 +191,9 @@ function seedDemo() {
 function demoEvents() {
   const t = new Date(), d = n => ymd(addDays(t, n)), cal = '（例）夫婦の共有カレンダー';
   return [
-    { id: 'e1', title: '（例）買い物', date: d(0), endDate: d(0), start: '10:00', end: '11:00', allDay: false, calName: cal, memo: '' },
-    { id: 'e2', title: '（例）実家へ', date: d(6), endDate: d(7), start: '', end: '', allDay: true, calName: cal, memo: '' },
-    { id: 'e3', title: '（例）歯医者', date: d(9), endDate: d(9), start: '15:00', end: '16:00', allDay: false, calName: cal, memo: '' },
+    { id: 'e1', title: '（例）買い物', date: d(0), endDate: d(0), start: '10:00', end: '11:00', allDay: false, calName: cal, memo: '', byMe: true },
+    { id: 'e2', title: '（例）実家へ', date: d(6), endDate: d(7), start: '', end: '', allDay: true, calName: cal, memo: '', byMe: false },
+    { id: 'e3', title: '（例）歯医者', date: d(9), endDate: d(9), start: '15:00', end: '16:00', allDay: false, calName: cal, memo: '', byMe: false },
   ];
 }
 
@@ -283,12 +285,13 @@ function entriesByDay() {
     if (!state.filters[it.type] || !it.date) return;
     add(it.date, { kind: 'item', it, id: it.id, start: it.start, end: it.end, title: titleOf(it), color: CATS[it.type].color, done: it.done });
   });
-  if (state.filters.ext) {
+  {
     state.events.forEach(ev => {
+      if (!state.filters[ev.byMe ? 'extMe' : 'extWife']) return;
       let d = parse(ev.date);
       const end = parse(ev.endDate || ev.date);
       for (let i = 0; i < 62 && d <= end; i++, d = addDays(d, 1)) {
-        add(ymd(d), { kind: 'ext', ev, id: ev.id, start: ev.allDay ? '' : ev.start, end: ev.end, title: ev.title, color: EXT_COLOR });
+        add(ymd(d), { kind: 'ext', ev, id: ev.id, start: ev.allDay ? '' : ev.start, end: ev.end, title: ev.title, color: extColor(ev.byMe) });
       }
     });
   }
@@ -303,13 +306,16 @@ function render() {
   renderFilters();
   const map = entriesByDay();
   renderGrid(map);
-  renderAgenda(map);
+  if ($('#day').open) renderAgenda(map);
   renderSummary();
 }
 
 function renderFilters() {
   const list = Object.keys(CATS).map(k => ({ k, label: CATS[k].label, color: CATS[k].color }));
-  if (isDemo() || state.sharedCalId) list.push({ k: 'ext', label: '共有カレンダーの予定', color: EXT_COLOR });
+  if (isDemo() || state.sharedCalId) {
+    list.push({ k: 'extMe', label: '共有（自分）', color: extColor(true) });
+    list.push({ k: 'extWife', label: '共有（妻）', color: extColor(false) });
+  }
   $('#filters').innerHTML = list.map(x =>
     `<button type="button" class="fchip${state.filters[x.k] ? '' : ' off'}" data-k="${x.k}" style="--c:${x.color}"><i></i>${esc(x.label)}</button>`
   ).join('');
@@ -327,7 +333,12 @@ function chipHtml(e) {
 function renderGrid(map) {
   const { f, start, weeks } = monthGrid();
   const today = ymd(new Date());
-  const max = isWide() ? 4 : 3;
+  // マスの高さから、表示できる予定の数を計算（カレンダーを画面いっぱいに使う）
+  const gridH = $('#grid').clientHeight || 500;
+  const cellH = gridH / weeks;
+  const chipH = isWide() ? 20 : 17;
+  const max = Math.max(1, Math.floor((cellH - (isWide() ? 32 : 28)) / chipH));
+  $('#grid').style.setProperty('--weeks', weeks);
   let h = '';
   for (let i = 0; i < weeks * 7; i++) {
     const d = addDays(start, i), k = ymd(d), list = map[k] || [];
@@ -353,7 +364,8 @@ function timeText(e) {
 function renderAgenda(map) {
   const d = parse(state.sel);
   const list = map[state.sel] || [];
-  let h = `<div class="ag-head"><h2>${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）</h2><button type="button" class="ag-add" data-add="${state.sel}">＋ 追加</button></div>`;
+  $('#dayTitle').textContent = `${d.getMonth() + 1}月${d.getDate()}日（${WD[d.getDay()]}）`;
+  let h = '';
   if (!list.length) h += '<div class="ag-empty">予定はありません</div>';
   list.forEach(e => {
     if (e.kind === 'item') {
@@ -365,7 +377,7 @@ function renderAgenda(map) {
     } else {
       h += `<button type="button" class="ag-row ext" style="--c:${e.color}" data-kind="ext" data-id="${esc(e.id)}">` +
         `<span class="dot"></span><span class="ag-time">${timeText(e)}</span>` +
-        `<span class="ag-main"><span class="ag-title">${esc(e.title)}</span><span class="ag-sub">${esc(e.ev.calName || '共有カレンダー')}</span></span></button>`;
+        `<span class="ag-main"><span class="ag-title">${esc(e.title)}</span><span class="ag-sub">${esc((e.ev.byMe ? '自分' : '妻') + 'が入れた予定・' + (e.ev.calName || '共有カレンダー'))}</span></span></button>`;
     }
   });
   $('#agendaBox').innerHTML = h;
@@ -382,7 +394,7 @@ function renderSummary() {
   const prefix = f.getFullYear() + '-' + pad(f.getMonth() + 1);
   const month = state.items.filter(i => (i.date || '').startsWith(prefix));
   const days = new Date(f.getFullYear(), f.getMonth() + 1, 0).getDate();
-  let h = `<div class="sum-title">${f.getMonth() + 1}月のまとめ</div>`;
+  let h = `<div class="sum-title">${f.getMonth() + 1}月のまとめ</div><div class="sum-cards">`;
 
   // ラン
   const runs = month.filter(i => i.type === 'run');
@@ -444,6 +456,7 @@ function renderSummary() {
     `<div class="big">${yen(total)}<small>${goal ? '/ ' + yen(goal) : ''}</small></div>` + fund +
     kv('今月の積み立て', (monthNet < 0 ? '−' : '') + yen(Math.abs(monthNet))));
 
+  h += '</div>';
   if (!runGoal && !goalMin && !goal) h += '<p class="hint">右上の設定から目標を入れると、進み具合が表示されます。</p>';
   $('#summaryBox').innerHTML = h;
 }
@@ -582,7 +595,7 @@ function openExt(id) {
     `<div class="detail-title">${esc(ev.title)}</div>` +
     `<div class="detail-line">${esc(when)}</div>` +
     (ev.location ? `<div class="detail-line">場所：${esc(ev.location)}</div>` : '') +
-    `<div class="detail-line">${esc(ev.calName || '共有カレンダー')}</div>` +
+    `<div class="detail-line">${esc((ev.byMe ? '自分' : '妻') + 'が入れた予定・' + (ev.calName || '共有カレンダー'))}</div>` +
     (ev.memo ? `<div class="detail-line">${esc(ev.memo)}</div>` : '') +
     `<p class="hint">この予定はGoogleカレンダー側で作られたものです。変更はGoogleカレンダーのアプリから行ってください。</p>`;
   $('#detail').showModal();
@@ -594,6 +607,13 @@ function fillSharedSelect() {
   sel.innerHTML = '<option value="">（まだ選んでいません）</option>' +
     state.calendars.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.owned === false ? '（共有されたもの）' : ''}</option>`).join('');
   sel.value = state.sharedCalId || '';
+}
+const pick = { me: DEF_ME, wife: DEF_WIFE };
+function renderSwatches() {
+  [['#swMe', 'me', '#lblMe'], ['#swWife', 'wife', '#lblWife']].forEach(([box, key, lbl]) => {
+    $(box).innerHTML = PALETTE.map(c => `<button type="button" class="swatch${pick[key] === c ? ' on' : ''}" style="--c:${c}" data-c="${c}" aria-label="${c}"></button>`).join('');
+    $(lbl).style.setProperty('--c', pick[key]);
+  });
 }
 function openSettings() {
   const s = state.settings || {};
@@ -612,6 +632,9 @@ function openSettings() {
   $('#sFundName').value = s.fundName || '';
   $('#sFundGoal').value = s.fundGoal || '';
   $('#sFundDate').value = s.fundDate || '';
+  pick.me = s.colorMe || DEF_ME;
+  pick.wife = s.colorWife || DEF_WIFE;
+  renderSwatches();
   $('#settings').showModal();
 }
 async function testConnection() {
@@ -635,6 +658,7 @@ async function saveSettings(ev) {
   const settings = {
     runGoal: $('#sRunGoal').value, examName: $('#sExamName').value.trim(), examDate: $('#sExamDate').value,
     studyGoal: $('#sStudyGoal').value, fundName: $('#sFundName').value.trim(), fundGoal: $('#sFundGoal').value, fundDate: $('#sFundDate').value,
+    colorMe: pick.me, colorWife: pick.wife,
   };
   state.cfg = newCfg;
   LS.set('mp_cfg', { apiUrl: newCfg.apiUrl === MPC.apiUrl ? '' : newCfg.apiUrl, token: newCfg.token });
@@ -675,6 +699,11 @@ function moveMonth(n) {
   render();
   load();
 }
+function openDay() {
+  render();
+  renderAgenda(entriesByDay());
+  $('#day').showModal();
+}
 function openEntry(kind, id) {
   if (kind === 'ext') openExt(id);
   else { const it = state.items.find(x => x.id === id); if (it) openEditor(it); }
@@ -703,20 +732,24 @@ function bind() {
     const chip = e.target.closest('.chip');
     const cell = e.target.closest('.cell'); if (!cell) return;
     const date = cell.dataset.date;
-    if (chip && isWide()) { state.sel = date; render(); openEntry(chip.dataset.kind, chip.dataset.id); return; }
-    if (date === state.sel && !isWide()) { openEditor(null, date); return; }
-    if (date === state.sel && isWide() && !chip) { openEditor(null, date); return; }
     state.sel = date;
     const d = parse(date);
-    if (d.getMonth() !== state.view.getMonth()) { state.view = new Date(d.getFullYear(), d.getMonth(), 1); render(); load(); return; }
-    render();
+    if (d.getMonth() !== state.view.getMonth()) { state.view = new Date(d.getFullYear(), d.getMonth(), 1); load(); }
+    if (chip && isWide()) { render(); openEntry(chip.dataset.kind, chip.dataset.id); return; }
+    openDay();
   };
   $('#agendaBox').onclick = e => {
-    const add = e.target.closest('[data-add]');
-    if (add) { openEditor(null, add.dataset.add); return; }
     const row = e.target.closest('.ag-row');
-    if (row) openEntry(row.dataset.kind, row.dataset.id);
+    if (!row) return;
+    $('#day').close();
+    openEntry(row.dataset.kind, row.dataset.id);
   };
+  $('#dayAdd').onclick = () => { $('#day').close(); openEditor(null, state.sel); };
+  [['#swMe', 'me'], ['#swWife', 'wife']].forEach(([box, key]) => {
+    $(box).onclick = e => { const b = e.target.closest('.swatch'); if (b) { pick[key] = b.dataset.c; renderSwatches(); } };
+  });
+  let resizeTimer;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 120); });
   $$('.tabbar button').forEach(b => { b.onclick = () => { document.body.dataset.tab = b.dataset.tab; window.scrollTo(0, 0); }; });
 
   // 入力画面

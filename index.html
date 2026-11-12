@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-180.png">
 <title>マイプラン</title>
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 <script>try{var t=localStorage.getItem("mp_theme");t=t&&JSON.parse(t);if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body data-tab="cal">
@@ -36,10 +36,7 @@
     <div class="weekdays"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
     <div id="grid" class="grid"></div>
   </section>
-  <aside id="side" class="side">
-    <section id="agendaBox" class="agenda"></section>
-    <section id="summaryBox" class="summary"></section>
-  </aside>
+  <section id="summaryBox" class="summary"></section>
 </main>
 
 <nav class="tabbar">
@@ -101,6 +98,18 @@
   </form>
 </dialog>
 
+<!-- 1日の予定 -->
+<dialog id="day">
+  <div class="dlg">
+    <div class="dlg-head">
+      <button type="button" class="icon" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z"/></svg></button>
+      <h2 id="dayTitle"></h2>
+      <button type="button" id="dayAdd" class="btn-primary">＋ 追加</button>
+    </div>
+    <div class="dlg-body" style="padding:0 0 24px"><section id="agendaBox" class="agenda"></section></div>
+  </div>
+</dialog>
+
 <!-- 共有カレンダーの予定（見るだけ） -->
 <dialog id="detail">
   <div class="dlg">
@@ -123,6 +132,12 @@
     <div class="dlg-body">
       <h3 class="sec">表示</h3>
       <div class="field-row"><label for="sTheme">色のテーマ</label><select id="sTheme"><option value="auto">自動（iPhoneの設定に合わせる）</option><option value="light">ライト</option><option value="dark">ダーク</option></select></div>
+
+      <h3 class="sec">夫婦の共有カレンダーの色</h3>
+      <div class="color-label" id="lblMe"><i></i>自分が入れた予定</div>
+      <div class="swatches" id="swMe"></div>
+      <div class="color-label" id="lblWife"><i></i>妻が入れた予定</div>
+      <div class="swatches" id="swWife"></div>
 
       <h3 class="sec">アカウント</h3>
       <div class="account-row"><span id="accountName">—</span><button type="button" id="logoutBtn" class="btn-outline">ログアウト</button></div>
@@ -171,7 +186,7 @@
 </div>
 
 <div id="toast" class="toast" role="status"></div>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="config.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
