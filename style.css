@@ -261,3 +261,31 @@ details.backup summary { font-size: 13px; color: var(--fg2); cursor: pointer; pa
 .viewport { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: pan-y; }
 .track { display: flex; width: 300%; height: 100%; transform: translateX(-33.3333%); will-change: transform; }
 .track > .grid { flex: 0 0 33.3333%; width: 33.3333%; height: 100%; }
+
+/* ---- 開いた画面：左の「1日の予定」（時間ごと） ---- */
+.day-pane { display: none; }
+@media (min-width: 640px) {
+  .layout { flex-direction: row; }
+  .day-pane { display: flex; flex-direction: column; flex: 0 0 34%; max-width: 440px; min-width: 230px; min-height: 0; border-right: 1px solid var(--line); }
+  .cal-box { flex: 1; min-width: 0; }
+}
+.dp-head { display: flex; align-items: center; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); }
+.dp-date { flex: 1; display: flex; align-items: center; gap: 8px; }
+.dp-wd { font-size: 12px; color: var(--fg2); }
+.dp-num { width: 36px; height: 36px; line-height: 36px; text-align: center; border-radius: 50%; font-size: 20px; }
+.dp-num.today { background: var(--blue); color: var(--on-blue); font-weight: 600; }
+.dp-md { font-size: 13px; color: var(--fg2); }
+.dp-allday { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 6px 50px; border-bottom: 1px solid var(--line); }
+.dp-allday .chip { font-size: 12px; line-height: 20px; }
+.dp-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.dp-timeline { position: relative; height: calc(24 * 48px); margin: 8px 0 24px; }
+.dp-hour { position: absolute; left: 0; right: 0; height: 48px; cursor: pointer; }
+.dp-hour::after { content: ""; position: absolute; left: 44px; right: 0; top: 0; border-top: 1px solid var(--line); }
+.dp-hour:first-child::after { display: none; }
+.dp-hl { position: absolute; left: 0; width: 40px; text-align: right; top: -7px; font-size: 10.5px; color: var(--fg2); }
+.dp-ev { position: absolute; display: flex; flex-direction: column; align-items: flex-start; overflow: hidden; text-align: left; padding: 2px 6px; border-radius: 6px; background: var(--c); color: #fff; font-size: 12px; line-height: 1.3; border: 1px solid var(--bg); z-index: 1; }
+.dp-ev b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dp-ev small { font-size: 11px; opacity: .9; }
+.dp-ev.done { opacity: .6; }
+.dp-now { position: absolute; left: 44px; right: 0; height: 2px; background: #EA4335; z-index: 2; pointer-events: none; }
+.dp-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #EA4335; }

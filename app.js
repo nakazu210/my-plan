@@ -353,6 +353,7 @@ function render() {
   renderGrid(entriesByDay(evCache[monthKey(pv)] || []), pv, $('#gridPrev'));
   renderGrid(entriesByDay(evCache[monthKey(nv)] || []), nv, $('#gridNext'));
   if ($('#day').open) renderAgenda(map);
+  if (isWide()) renderDayPane(map);
   if ($('#sumDlg').open) renderSummary();
 }
 
@@ -402,6 +403,67 @@ function renderGrid(map, view, el) {
     h += '</div>';
   }
   el.innerHTML = h;
+}
+
+/* ---------- 開いた画面：左側の「1日の予定」（時間ごと） ---------- */
+const HOUR_H = 48;
+const toMin = t => { const a = String(t || '').split(':').map(Number); return a.length < 2 || isNaN(a[0]) ? null : a[0] * 60 + a[1]; };
+let paneScrolledFor = '';
+function layoutDay(evs) {
+  evs.sort((a, b) => a.s - b.s || b.e - a.e);
+  const out = [];
+  let cluster = [], clusterEnd = -1;
+  const flush = () => {
+    const cols = [];
+    cluster.forEach(ev => {
+      let c = cols.findIndex(end => end <= ev.s);
+      if (c < 0) { c = cols.length; cols.push(0); }
+      cols[c] = ev.e; ev.col = c;
+    });
+    cluster.forEach(ev => { ev.ncol = cols.length; });
+    out.push(...cluster);
+    cluster = [];
+  };
+  evs.forEach(ev => {
+    if (cluster.length && ev.s >= clusterEnd) { flush(); clusterEnd = -1; }
+    cluster.push(ev);
+    clusterEnd = Math.max(clusterEnd, ev.e);
+  });
+  if (cluster.length) flush();
+  return out;
+}
+function renderDayPane(map) {
+  const d = parse(state.sel), today = ymd(new Date());
+  const list = map[state.sel] || [];
+  $('#dpDate').innerHTML = `<span class="dp-wd">${WD[d.getDay()]}</span><span class="dp-num${state.sel === today ? ' today' : ''}">${d.getDate()}</span><span class="dp-md">${d.getMonth() + 1}月${d.getDate()}日</span>`;
+  const allDay = list.filter(e => !e.start);
+  $('#dpAllDay').innerHTML = allDay.map(e => chipHtml(e)).join('');
+  $('#dpAllDay').hidden = !allDay.length;
+  const timed = list.filter(e => e.start).map(e => {
+    const s0 = toMin(e.start);
+    let e0 = toMin(e.end);
+    if (e0 == null || e0 <= s0) e0 = s0 + 60;
+    return { en: e, s: s0, e: Math.min(e0, 24 * 60) };
+  });
+  let h = '';
+  for (let i = 0; i < 24; i++) h += `<div class="dp-hour" style="top:${i * HOUR_H}px" data-h="${i}"><span class="dp-hl">${i ? i + ':00' : ''}</span></div>`;
+  layoutDay(timed).forEach(x => {
+    const top = x.s / 60 * HOUR_H, height = Math.max(20, (x.e - x.s) / 60 * HOUR_H - 2);
+    const en = x.en;
+    h += `<button type="button" class="dp-ev${en.done ? ' done' : ''}" style="--c:${en.color};top:${top}px;height:${height}px;left:calc(48px + (100% - 54px) * ${x.col} / ${x.ncol});width:calc((100% - 54px) / ${x.ncol} - 2px)" data-kind="${en.kind}" data-id="${esc(en.id)}">` +
+      `<b>${esc((en.done ? '✓' : '') + en.title)}</b>${height > 34 ? `<small>${esc(en.start)}〜${esc(en.end || '')}</small>` : ''}</button>`;
+  });
+  if (state.sel === today) {
+    const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+    h += `<div class="dp-now" style="top:${m / 60 * HOUR_H}px"></div>`;
+  }
+  $('#dpTimeline').innerHTML = h;
+  if (paneScrolledFor !== state.sel) {
+    paneScrolledFor = state.sel;
+    const first = timed.length ? Math.min(...timed.map(x => x.s)) : null;
+    const target = state.sel === today ? new Date().getHours() * 60 - 90 : first != null ? first - 60 : 7 * 60;
+    $('#dpScroll').scrollTop = Math.max(0, target / 60 * HOUR_H);
+  }
 }
 
 function timeText(e) {
@@ -516,12 +578,13 @@ function defaultSync(type) {
 }
 const sharedAvailable = () => isDemo() || !!state.sharedCalId;
 
-function openEditor(it, date) {
+function openEditor(it, date, startTime) {
   if (it) {
     state.editing = JSON.parse(JSON.stringify(it));
   } else {
     const type = 'other'; // 新しい予定は「その他」から始める
-    state.editing = { type, date: date || state.sel, title: '', start: '', end: '', memo: '', data: {}, done: date ? date < ymd(new Date()) : false, sync: defaultSync(type) };
+    const st0 = startTime || '', en0 = startTime ? pad(Math.min(23, Number(startTime.slice(0, 2)) + 1)) + startTime.slice(2) : '';
+    state.editing = { type, date: date || state.sel, title: '', start: st0, end: en0, memo: '', data: {}, done: date ? date < ymd(new Date()) : false, sync: defaultSync(type) };
   }
   const e = state.editing;
   $('#editTitle').textContent = e.id ? '予定を編集' : '予定を追加';
@@ -816,6 +879,7 @@ function bind() {
     const d = parse(date);
     if (d.getMonth() !== state.view.getMonth()) { state.view = new Date(d.getFullYear(), d.getMonth(), 1); load(); }
     if (chip && isWide()) { render(); openEntry(chip.dataset.kind, chip.dataset.id); return; }
+    if (isWide()) { render(); return; } // 開いた画面では左の「1日の予定」に表示
     openDay();
   };
   $('#agendaBox').onclick = e => {
@@ -823,6 +887,13 @@ function bind() {
     if (!row) return;
     $('#day').close();
     openEntry(row.dataset.kind, row.dataset.id);
+  };
+  $('#dpAdd').onclick = () => openEditor(null, state.sel);
+  $('#dayPane').onclick = e => {
+    const ev = e.target.closest('.dp-ev, .chip');
+    if (ev) { openEntry(ev.dataset.kind, ev.dataset.id); return; }
+    const hr = e.target.closest('.dp-hour');
+    if (hr) openEditor(null, state.sel, pad(Number(hr.dataset.h)) + ':00');
   };
   $('#dayAdd').onclick = () => { $('#day').close(); openEditor(null, state.sel); };
   [['#swMe', 'me'], ['#swWife', 'wife']].forEach(([box, key]) => {
