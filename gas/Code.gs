@@ -7,7 +7,7 @@
  */
 
 // Googleログイン用のクライアントID（Google Cloudで作成したもの。秘密の情報ではありません）
-const CLIENT_ID = '';
+const CLIENT_ID = '668061744549-2pb0nfulpkngjppp6pem4l0r2dk4gleo.apps.googleusercontent.com';
 
 const HEADERS = ['id', 'type', 'title', 'date', 'start', 'end', 'memo', 'data', 'sync', 'eventId', 'calId', 'done', 'updated'];
 const CAT_NAMES = { run: 'ラン計画', study: '勉強計画', money: '資金計画', other: 'マイプラン' };
