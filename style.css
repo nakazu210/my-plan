@@ -250,3 +250,7 @@ textarea { width: 100%; margin-top: 14px; background: var(--field); border: 0; b
 .account-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 details.backup { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 10px; }
 details.backup summary { font-size: 13px; color: var(--fg2); cursor: pointer; padding: 6px 0; }
+.token-box { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.token-box input { background: var(--field); border: 0; border-radius: 10px; padding: 12px; font-size: 16px; color: var(--fg); outline: none; text-align: center; }
+.token-box .btn-primary { padding: 11px; font-size: 15px; }
+.login-box .link-btn { display: block; margin: 12px auto 0; }

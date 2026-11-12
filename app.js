@@ -64,9 +64,12 @@ async function api(action, payload = {}, cfg = state.cfg) {
   try { j = await res.json(); } catch (e) { throw new Error('接続先URLが正しくないようです'); }
   if (!j.ok) {
     if (j.error === 'LOGIN_REQUIRED') {
-      state.session = null;
-      LS.set('mp_session', null);
-      if (cfg === state.cfg) showLogin();
+      if (cfg === state.cfg) {
+        state.session = null;
+        LS.set('mp_session', null);
+        if (state.cfg.token) { state.cfg.token = ''; LS.set('mp_cfg', { apiUrl: '', token: '' }); }
+        showLogin();
+      }
       throw new Error('ログインが必要です');
     }
     throw new Error(j.error || '不明なエラー');
@@ -95,7 +98,7 @@ async function showLogin() {
   if (!MPC.clientId) { $('#loginMsg').textContent = 'Googleログインの準備がまだです（クライアントID未設定）'; return; }
   try {
     await loadGsi();
-    google.accounts.id.initialize({ client_id: MPC.clientId, callback: onGoogleCredential, auto_select: false, ux_mode: 'popup' });
+    google.accounts.id.initialize({ client_id: MPC.clientId, callback: onGoogleCredential, auto_select: false, ux_mode: 'popup', itp_support: true, use_fedcm_for_button: true });
     $('#gsiBtn').innerHTML = '';
     google.accounts.id.renderButton($('#gsiBtn'), { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'ja', width: 280 });
   } catch (e) {
@@ -729,6 +732,23 @@ function bind() {
   $('#settingsForm').onsubmit = saveSettings;
   $('#sTheme').onchange = () => { LS.set('mp_theme', $('#sTheme').value); applyTheme($('#sTheme').value); };
   $('#logoutBtn').onclick = logout;
+  $('#tokenToggle').onclick = () => { $('#tokenBox').hidden = false; $('#tokenToggle').hidden = true; $('#loginToken').focus(); };
+  $('#tokenLoginBtn').onclick = async () => {
+    const token = $('#loginToken').value.trim();
+    if (!token) { $('#loginMsg').textContent = '合言葉を入れてください'; return; }
+    $('#loginMsg').textContent = '確認中…';
+    const cfg = { apiUrl: state.cfg.apiUrl, token };
+    try {
+      applyConfig(await api('config', {}, cfg));
+      state.cfg = cfg;
+      LS.set('mp_cfg', { apiUrl: cfg.apiUrl === MPC.apiUrl ? '' : cfg.apiUrl, token });
+      $('#login').hidden = true;
+      toast('ログインしました');
+      await load();
+    } catch (e) {
+      $('#loginMsg').textContent = e.message === 'ログインが必要です' ? '合言葉が違います' : 'ログインできませんでした：' + e.message;
+    }
+  };
   $('#demoBtn').onclick = () => {
     state.demoForced = true;
     $('#login').hidden = true;

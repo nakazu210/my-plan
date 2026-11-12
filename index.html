@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-180.png">
 <title>マイプラン</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 <script>try{var t=localStorage.getItem("mp_theme");t=t&&JSON.parse(t);if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body data-tab="cal">
@@ -161,12 +161,17 @@
     <p>Googleアカウントでログインしてください。<br>この端末では、次回からログイン不要です。</p>
     <div id="gsiBtn"></div>
     <div id="loginMsg" class="login-msg"></div>
+    <div id="tokenBox" class="token-box" hidden>
+      <input id="loginToken" type="password" autocomplete="off" placeholder="合言葉">
+      <button type="button" id="tokenLoginBtn" class="btn-primary">合言葉でログイン</button>
+    </div>
+    <button type="button" id="tokenToggle" class="link-btn">Googleログインがうまくいかないときは（合言葉で入る）</button>
     <button type="button" id="demoBtn" class="link-btn">ログインせずにお試し表示で見る</button>
   </div>
 </div>
 
 <div id="toast" class="toast" role="status"></div>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="config.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
