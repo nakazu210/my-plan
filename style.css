@@ -289,3 +289,10 @@ details.backup summary { font-size: 13px; color: var(--fg2); cursor: pointer; pa
 .dp-ev.done { opacity: .6; }
 .dp-now { position: absolute; left: 44px; right: 0; height: 2px; background: #EA4335; z-index: 2; pointer-events: none; }
 .dp-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #EA4335; }
+
+/* ---- 11/13：右側（ステータス表示の下）の余白までカレンダーを広げる ----
+   上部バー・絞り込みは時計などと重ならないよう余白を残し、カレンダー部分だけ端まで伸ばす */
+.layout { width: auto; margin-left: calc(-1 * env(safe-area-inset-left)); margin-right: calc(-1 * env(safe-area-inset-right)); }
+@media (max-width: 639px) {
+  .dlg { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+}
