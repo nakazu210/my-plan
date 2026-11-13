@@ -205,10 +205,16 @@ function syncBack_(r, ev) {
     it.date = o.date; it.start = o.start; it.end = o.end;
     changed = true;
   }
-  if (it.type === 'run' && !it.done && /^[✓✔]/.test(o.title)) {
-    it.done = true;
-    it.data = Object.assign({}, it.data || {}, runResult_(o.title));
-    changed = true;
+  if (it.type === 'run' && /^[✓✔]/.test(o.title)) {
+    // 実施済みでも、タイトルの実績（距離・時間）と違えば入れ直す（時間が抜けていた場合や書き直しにも対応）
+    const res = runResult_(o.title);
+    const d = it.data || {};
+    const diff = Object.keys(res).some(k => Number(d[k]) !== Number(res[k]));
+    if (!it.done || diff) {
+      it.done = true;
+      it.data = Object.assign({}, d, res);
+      changed = true;
+    }
   }
   if (!changed) return;
   it.updated = new Date().toISOString();
