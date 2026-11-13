@@ -604,6 +604,7 @@ function openEditor(it, date, startTime) {
   $('#fDone').checked = !!e.done;
   $('#fMemo').value = e.memo || '';
   $('#delBtn').hidden = !e.id;
+  $('#copyBtn').hidden = !e.id;
   const subs = new Set(state.items.filter(i => i.type === 'study' && i.data && i.data.subject).map(i => i.data.subject));
   if (state.settings.examName) subs.add(state.settings.examName);
   $('#subjects').innerHTML = Array.from(subs).map(x => `<option value="${esc(x)}">`).join('');
@@ -678,6 +679,17 @@ async function saveEditor(ev) {
     toast('保存できませんでした：' + e.message);
     $('#saveBtn').disabled = false;
   }
+}
+
+// 予定にない日に走った・勉強したときなど、今の内容をコピーして新しい予定として開く（日付は今日・実施済み）
+function copyItem() {
+  const src = JSON.parse(JSON.stringify(readEditor()));
+  ['id', 'eventId', 'calId', 'updated', 'calTitle', 'calDesc'].forEach(k => delete src[k]);
+  src.date = ymd(new Date());
+  src.done = true;
+  $('#editor').close();
+  openEditor(src);
+  toast('コピーしました。内容を直して保存してください');
 }
 
 async function deleteItem() {
@@ -942,6 +954,7 @@ function bind() {
     if (s && (!en || en <= s)) { const [h, m] = s.split(':').map(Number); $('#fEnd').value = pad(Math.min(23, h + 1)) + ':' + pad(m); }
   };
   $('#delBtn').onclick = deleteItem;
+  $('#copyBtn').onclick = copyItem;
   $('#settingsForm').onsubmit = saveSettings;
   $('#sTheme').onchange = () => { LS.set('mp_theme', $('#sTheme').value); applyTheme($('#sTheme').value); };
   $('#logoutBtn').onclick = logout;

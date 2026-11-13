@@ -180,6 +180,8 @@ dialog[open] { display: flex; }
 .btn-primary { background: var(--blue); color: var(--on-blue); border-radius: 18px; padding: 7px 20px; font-size: 14px; font-weight: 500; }
 .btn-primary:disabled { opacity: .5; }
 .btn-outline { border: 1px solid var(--line); color: var(--blue); border-radius: 18px; padding: 7px 16px; font-size: 14px; }
+.btn-sub { display: block; width: 100%; margin-top: 24px; padding: 12px; border-radius: 12px; color: var(--blue); border: 1px solid var(--line); }
+.btn-sub + .btn-danger { margin-top: 10px; }
 .btn-danger { display: block; width: 100%; margin-top: 24px; padding: 12px; border-radius: 12px; color: var(--danger); border: 1px solid var(--line); }
 
 .title-input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; font-size: 22px; padding: 12px 0 10px; outline: none; }
