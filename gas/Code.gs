@@ -179,15 +179,42 @@ function list_(req) {
   }
 }
 
-/** Googleカレンダー側で日時が変わっていたら、アプリにも反映 */
+/** Googleカレンダー側で日時が変わっていたら、アプリにも反映。
+ *  ランの予定はタイトルに「✓」が付いたら実施済みにし、タイトルの実績（距離・時間）も入れる */
 function syncBack_(r, ev) {
   if (r.row < 0) return;
   const o = evToObj_(ev, '');
   const it = r.obj;
-  if (it.date === o.date && it.start === o.start && it.end === o.end) return;
-  it.date = o.date; it.start = o.start; it.end = o.end;
+  let changed = false;
+  if (it.date !== o.date || it.start !== o.start || it.end !== o.end) {
+    it.date = o.date; it.start = o.start; it.end = o.end;
+    changed = true;
+  }
+  if (it.type === 'run' && !it.done && /^[✓✔]/.test(o.title)) {
+    it.done = true;
+    it.data = Object.assign({}, it.data || {}, runResult_(o.title));
+    changed = true;
+  }
+  if (!changed) return;
   it.updated = new Date().toISOString();
   writeRow_(r.row, it);
+}
+
+const toNum_ = s => Number(String(s).replace(/[，,]/g, '').replace(/[０-９．]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)));
+
+/** 実施済みランのタイトル（例「✓ ラン 1.57km 21分47秒（予定4km）」）から距離と時間を読む。
+ *  「（予定…）」より後ろは予定の内容なので読まない */
+function runResult_(title) {
+  const t = String(title).replace(/^[✓✔]\s*/, '').split(/[（(]予定/)[0];
+  const d = {};
+  let m;
+  if ((m = t.match(/([0-9０-９.．]+)\s*(km|ｋｍ|キロ)/i))) d.dist = toNum_(m[1]);
+  if ((m = t.match(/([0-9０-９]+)\s*時間\s*([0-9０-９]+)\s*分\s*([0-9０-９]+)\s*秒/))) {
+    d.min = toNum_(m[1]) * 60 + toNum_(m[2]); d.sec = toNum_(m[3]);
+  } else if ((m = t.match(/([0-9０-９]+)\s*分\s*([0-9０-９]+)\s*秒/))) {
+    d.min = toNum_(m[1]); d.sec = toNum_(m[2]);
+  }
+  return d;
 }
 
 /** カレンダーの予定をアプリの予定に変換（タイトルから距離・時間・金額を読み取る） */
@@ -202,7 +229,8 @@ function importEvent_(ev, type, calId) {
   const data = {};
   let m;
   if (type === 'run') {
-    if ((m = text.match(/([0-9０-９.．]+)\s*(km|ｋｍ|キロ)/i))) data.dist = toNum(m[1]);
+    if (done) Object.assign(data, runResult_(title));
+    else if ((m = text.match(/([0-9０-９.．]+)\s*(km|ｋｍ|キロ)/i))) data.dist = toNum(m[1]);
   } else if (type === 'study') {
     if ((m = text.match(/([0-9０-９.．]+)\s*時間/))) data.min = Math.round(toNum(m[1]) * 60);
     if ((m = text.match(/([0-9０-９]+)\s*分/))) data.min = (data.min || 0) + toNum(m[1]);
