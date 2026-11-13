@@ -142,11 +142,15 @@ function list_(req) {
     rows.forEach(r => { if (r.obj.eventId) byEvent[r.obj.eventId] = r; });
 
     // 1) 自分のカレンダー（ラン計画など）に直接入った予定を取り込む／時間の変更を反映
+    const checked = {};  // 読めたカレンダー
+    const seen = {};     // カレンダーに今ある予定
     Object.keys(CAT_NAMES).forEach(type => {
       const id = P_().getProperty('CAL_' + type);
       const cal = id && CalendarApp.getCalendarById(id);
       if (!cal) return;
+      checked[id] = true;
       cal.getEvents(from, to).forEach(ev => {
+        seen[ev.getId()] = true;
         const linked = byEvent[ev.getId()];
         if (linked) { syncBack_(linked, ev); return; }
         if (ev.isRecurringEvent()) return; // 繰り返し予定は取り込まない
@@ -156,6 +160,17 @@ function list_(req) {
         rows.push({ row: -1, obj: it });
       });
     });
+
+    // 1-2) 自分のカレンダーから消された予定は、アプリからも消す（カレンダーで消せばアプリも片づく）
+    const gone = rows.filter(r => r.row > 0 && r.obj.eventId && checked[r.obj.calId] &&
+      r.obj.date >= req.from && r.obj.date <= req.to && !seen[r.obj.eventId]);
+    if (gone.length) {
+      const sh = sheet_();
+      gone.map(r => r.row).sort((a, b) => b - a).forEach(n => sh.deleteRow(n));
+      const goneIds = {};
+      gone.forEach(r => { goneIds[r.obj.id] = true; });
+      for (let i = rows.length - 1; i >= 0; i--) if (goneIds[rows[i].obj.id]) rows.splice(i, 1);
+    }
 
     // 2) 夫婦の共有カレンダー：アプリの予定は時間の変更を反映、それ以外は「見るだけ」で表示
     const sid = P_().getProperty('SHARED_CAL');
