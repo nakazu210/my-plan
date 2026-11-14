@@ -96,8 +96,6 @@ body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; 
 .cell.out .num { opacity: .45; }
 .num.today { background: var(--blue); color: var(--on-blue) !important; font-weight: 600; opacity: 1 !important; }
 .chip { display: block; width: 100%; text-align: left; font-size: 10.5px; line-height: 16px; padding: 0 3px; border-radius: 4px; background: var(--c); color: #fff; white-space: nowrap; overflow: hidden; text-overflow: clip; }
-.chip.timed { background: transparent; color: var(--fg); padding-left: 1px; }
-.chip.timed::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c); margin-right: 2px; vertical-align: 1px; }
 .chip .t { display: none; }
 .chip.done { opacity: .62; }
 
@@ -206,6 +204,10 @@ dialog[open] { display: flex; }
 .field-col { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
 .field-col label { font-size: 13px; color: var(--fg2); }
 .field-col input, .field-col select { width: 100%; }
+.cal-list { display: flex; flex-direction: column; border-radius: 10px; background: var(--field); }
+.cal-check { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 15px; }
+.cal-check + .cal-check { border-top: 1px solid rgba(127,127,127,.18); }
+.cal-check input { width: 20px; height: 20px; flex: none; accent-color: var(--blue); }
 textarea { width: 100%; margin-top: 14px; background: var(--field); border: 0; border-radius: 8px; padding: 10px; font-size: 15px; resize: vertical; outline: none; }
 .type-fields { display: none; }
 .type-fields.on { display: block; }

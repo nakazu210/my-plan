@@ -44,7 +44,7 @@ const state = {
   demoForced: false,
   view: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   sel: ymd(new Date()),
-  items: [], events: [], settings: {}, calendars: [], sharedCalId: '',
+  items: [], events: [], settings: {}, calendars: [], sharedCalId: '', sharedCalIds: [],
   filters: Object.assign({ run: true, study: true, money: true, other: true, extMe: true, extWife: true }, LS.get('mp_filters', {})),
   editing: null,
 };
@@ -144,12 +144,13 @@ async function demoApi(action, p) {
   if (!items) { items = seedDemo(); LS.set('mp_demo_items', items); }
   const settings = LS.get('mp_demo_settings', null) || demoSettings();
   switch (action) {
-    case 'config': return { calendars: [{ id: 'demo-shared', name: '（例）夫婦の共有カレンダー' }], sharedCalId: LS.get('mp_demo_shared', 'demo-shared'), settings };
+    case 'config': { const sid = LS.get('mp_demo_shared', 'demo-shared'); return { calendars: [{ id: 'demo-shared', name: '（例）夫婦の共有カレンダー' }], sharedCalId: sid, sharedCalIds: LS.get('mp_demo_shared_list', sid ? [sid] : []), settings }; }
     case 'settings':
       if (p.settings) LS.set('mp_demo_settings', p.settings);
       if (p.sharedCalId != null) LS.set('mp_demo_shared', p.sharedCalId);
+      if (Array.isArray(p.sharedCalIds)) LS.set('mp_demo_shared_list', p.sharedCalIds);
       return demoApi('config', {});
-    case 'list': return { items, events: LS.get('mp_demo_shared', 'demo-shared') ? demoEvents() : [] };
+    case 'list': return { items, events: LS.get('mp_demo_shared_list', ['demo-shared']).length ? demoEvents() : [] };
     case 'save': {
       const it = Object.assign({}, p.item);
       if (!it.id) it.id = 'd' + Date.now().toString(36);
@@ -279,6 +280,8 @@ async function loadConfig() {
 function applyConfig(c) {
   state.calendars = c.calendars || [];
   state.sharedCalId = c.sharedCalId || '';
+  // 表示する共有カレンダー（複数）。古いApps Scriptのときは1つだけ
+  state.sharedCalIds = Array.isArray(c.sharedCalIds) ? c.sharedCalIds : (state.sharedCalId ? [state.sharedCalId] : []);
   state.settings = c.settings || {};
 }
 
@@ -359,7 +362,7 @@ function render() {
 
 function renderFilters() {
   const list = Object.keys(CATS).map(k => ({ k, label: CATS[k].label, color: CATS[k].color }));
-  if (isDemo() || state.sharedCalId) {
+  if (isDemo() || state.sharedCalIds.length) {
     list.push({ k: 'extMe', label: '共有（自分）', color: extColor(true) });
     list.push({ k: 'extWife', label: '共有（妻）', color: extColor(false) });
   }
@@ -726,6 +729,10 @@ function openExt(id) {
 
 /* ---------- 設定 ---------- */
 function fillSharedSelect() {
+  const on = new Set(state.sharedCalIds);
+  $('#sSharedList').innerHTML = state.calendars.length ? state.calendars.map(c =>
+    `<label class="cal-check"><input type="checkbox" value="${esc(c.id)}"${on.has(c.id) ? ' checked' : ''}><span>${esc(c.name)}${c.owned === false ? '（共有されたもの）' : ''}</span></label>`
+  ).join('') : '<p class="hint">Googleとつなぐと選べます</p>';
   const sel = $('#sShared');
   sel.innerHTML = '<option value="">（まだ選んでいません）</option>' +
     state.calendars.map(c => `<option value="${esc(c.id)}">${esc(c.name)}${c.owned === false ? '（共有されたもの）' : ''}</option>`).join('');
@@ -768,6 +775,7 @@ async function testConnection() {
     const c = await api('config', {}, cfg);
     state.calendars = c.calendars || [];
     if (c.sharedCalId) state.sharedCalId = c.sharedCalId;
+    if (Array.isArray(c.sharedCalIds)) state.sharedCalIds = c.sharedCalIds;
     fillSharedSelect();
     $('#testMsg').textContent = 'つながりました（カレンダー' + state.calendars.length + '件）';
   } catch (e) {
@@ -791,8 +799,11 @@ async function saveSettings(ev) {
     if (needsLogin()) { $('#settings').close(); render(); showLogin(); return; }
   }
   try {
-    const sharedChanged = $('#sShared').value !== state.sharedCalId;
-    applyConfig(await api('settings', { settings, sharedCalId: $('#sShared').value }));
+    const ids = $$('#sSharedList input:checked').map(x => x.value);
+    // 予定を入れる先が未選択なら、表示するカレンダーの1つ目を使う
+    const target = $('#sShared').value || ids[0] || '';
+    const sharedChanged = target !== state.sharedCalId || ids.join() !== state.sharedCalIds.join();
+    applyConfig(await api('settings', { settings, sharedCalId: target, sharedCalIds: ids }));
     if (sharedChanged || changed) resetEvCache(true);
     $('#settings').close();
     toast('設定を保存しました');

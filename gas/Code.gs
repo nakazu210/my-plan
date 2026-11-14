@@ -117,13 +117,24 @@ function config_() {
   return {
     calendars: calendars,
     sharedCalId: p.getProperty('SHARED_CAL') || '',
+    sharedCalIds: sharedIds_(),
     settings: JSON.parse(p.getProperty('SETTINGS') || '{}'),
   };
+}
+
+/** 一緒に表示する共有カレンダー（複数）。未設定なら、予定を入れる先の1つだけ */
+function sharedIds_() {
+  const p = P_();
+  let ids = [];
+  try { ids = JSON.parse(p.getProperty('SHARED_CALS') || '[]'); } catch (e) { ids = []; }
+  if (!ids.length && p.getProperty('SHARED_CAL')) ids = [p.getProperty('SHARED_CAL')];
+  return ids;
 }
 
 function saveSettings_(req) {
   const p = P_();
   if (req.sharedCalId !== undefined && req.sharedCalId !== null) p.setProperty('SHARED_CAL', req.sharedCalId);
+  if (Array.isArray(req.sharedCalIds)) p.setProperty('SHARED_CALS', JSON.stringify(req.sharedCalIds));
   if (req.settings) p.setProperty('SETTINGS', JSON.stringify(req.settings));
   return config_();
 }
@@ -172,14 +183,18 @@ function list_(req) {
       for (let i = rows.length - 1; i >= 0; i--) if (goneIds[rows[i].obj.id]) rows.splice(i, 1);
     }
 
-    // 2) 夫婦の共有カレンダー：アプリの予定は時間の変更を反映、それ以外は「見るだけ」で表示
-    const sid = P_().getProperty('SHARED_CAL');
-    const cal = sid && CalendarApp.getCalendarById(sid);
-    if (cal) {
-      const me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+    // 2) 夫婦の共有カレンダー（複数可）：アプリの予定は時間の変更を反映、それ以外は「見るだけ」で表示
+    const me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+    const shown = {}; // 同じ予定が2つのカレンダーに入っている場合は1回だけ出す
+    sharedIds_().forEach(sid => {
+      const cal = CalendarApp.getCalendarById(sid);
+      if (!cal) return;
       cal.getEvents(from, to).forEach(ev => {
         const linked = byEvent[ev.getId()];
         if (linked) { syncBack_(linked, ev); return; }
+        const key = ev.getId() + '|' + ev.getStartTime().getTime();
+        if (shown[key]) return;
+        shown[key] = true;
         const o = evToObj_(ev, cal.getName());
         // 誰が入れた予定か（自分／妻）で色を分けるため
         let creators = [];
@@ -187,7 +202,7 @@ function list_(req) {
         o.byMe = !creators.length || creators.indexOf(me) >= 0;
         events.push(o);
       });
-    }
+    });
     return { items: rows.map(r => r.obj), events: events };
   } finally {
     lock.releaseLock();
