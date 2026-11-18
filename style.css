@@ -300,3 +300,18 @@ details.backup summary { font-size: 13px; color: var(--fg2); cursor: pointer; pa
 @media (max-width: 639px) {
   .dlg { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 }
+
+/* ---- 実行チェック（できた／できなかった） ---- */
+:root { --ok: #188038; --ng: #d93025; }
+.ag-item { display: flex; align-items: center; }
+.ag-item .ag-row { flex: 1; min-width: 0; padding-right: 8px; }
+.chk { flex: none; width: 34px; height: 34px; margin-right: 14px; border-radius: 50%; border: 2px solid var(--line); color: #fff; font-size: 17px; font-weight: 700; line-height: 30px; text-align: center; }
+.chk.ok { background: var(--ok); border-color: var(--ok); }
+.chk.ng { background: var(--ng); border-color: var(--ng); }
+.ag-row.ng .ag-title { text-decoration: line-through; text-decoration-color: var(--ng); }
+.chip.ng, .dp-ev.ng { opacity: .55; }
+.status-seg { margin: 0; flex-wrap: nowrap; gap: 4px; }
+.status-seg button { padding: 5px 10px; font-size: 13px; }
+.status-seg button.on { background: var(--fg2); border-color: var(--fg2); color: #fff; }
+.status-seg button.ok.on { background: var(--ok); border-color: var(--ok); }
+.status-seg button.ng.on { background: var(--ng); border-color: var(--ng); }

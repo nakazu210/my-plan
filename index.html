@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-180.png">
 <title>マイプラン</title>
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <script>try{var t=localStorage.getItem("mp_theme");t=t&&JSON.parse(t);if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body data-tab="cal">
@@ -91,7 +91,7 @@
         <div class="field-row"><label for="fAmount">金額</label><span class="unit"><input type="number" id="fAmount" inputmode="numeric" min="0" placeholder="0"> 円</span></div>
       </div>
 
-      <div class="field-row"><label for="fDone" id="doneLabel">実施済み</label><input type="checkbox" id="fDone" class="switch"></div>
+      <div class="field-row"><label>実行チェック</label><span class="seg status-seg" id="fStatus"><button type="button" data-v="">まだ</button><button type="button" data-v="ok" class="ok">できた</button><button type="button" data-v="ng" class="ng">できなかった</button></span></div>
       <textarea id="fMemo" rows="3" placeholder="メモ"></textarea>
 
       <div class="sync-title">Googleカレンダーへの同期</div>
@@ -207,7 +207,7 @@
 </div>
 
 <div id="toast" class="toast" role="status"></div>
-<script src="config.js?v=7"></script>
-<script src="app.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

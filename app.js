@@ -300,6 +300,16 @@ function paceText(dist, secs) {
   const p = Math.round(secs / dist);
   return Math.floor(p / 60) + "'" + pad(p % 60) + '"/km';
 }
+// 実行チェック：done=できた / data.miss=できなかった / どちらもなし=まだ
+const statusOf = it => it.done ? 'ok' : (it.data && it.data.miss) ? 'ng' : '';
+const markOf = st => st === 'ok' ? '✓' : st === 'ng' ? '✗' : '';
+const STATUS_LABEL = { '': 'まだ', ok: 'できた', ng: 'できなかった' };
+function applyStatus(it, st) {
+  it.done = st === 'ok';
+  it.data = Object.assign({}, it.data || {});
+  if (st === 'ng') it.data.miss = true; else delete it.data.miss;
+}
+
 function detailOf(it) {
   const d = it.data || {};
   const parts = [];
@@ -314,7 +324,7 @@ function detailOf(it) {
   } else if (it.type === 'money') {
     if (d.amount) parts.push((d.kind === 'out' ? '取り崩し ' : '積み立て ') + yen(num(d.amount)));
   }
-  parts.unshift(it.done ? '実施済み' : '予定');
+  parts.unshift(statusOf(it) === 'ok' ? 'できた' : statusOf(it) === 'ng' ? 'できなかった' : '予定');
   return parts.join('・');
 }
 function calDesc(it) {
@@ -329,7 +339,7 @@ function entriesByDay(events = state.events) {
   const add = (k, e) => { (out[k] = out[k] || []).push(e); };
   state.items.forEach(it => {
     if (!state.filters[it.type] || !it.date) return;
-    add(it.date, { kind: 'item', it, id: it.id, start: it.start, end: it.end, title: titleOf(it), color: CATS[it.type].color, done: it.done });
+    add(it.date, { kind: 'item', it, id: it.id, start: it.start, end: it.end, title: titleOf(it), color: CATS[it.type].color, done: it.done, status: statusOf(it) });
   });
   {
     events.forEach(ev => {
@@ -376,8 +386,9 @@ function chipHtml(e) {
   if (e.start) cls.push('timed');
   if (e.kind === 'ext') cls.push('ext');
   if (e.done) cls.push('done');
+  if (e.status === 'ng') cls.push('ng');
   return `<button type="button" class="${cls.join(' ')}" style="--c:${e.color}" data-kind="${e.kind}" data-id="${esc(e.id)}">` +
-    (e.start ? `<span class="t">${esc(e.start)}</span>` : '') + (e.done ? '✓' : '') + esc(e.title) + '</button>';
+    (e.start ? `<span class="t">${esc(e.start)}</span>` : '') + esc(markOf(e.status)) + esc(e.title) + '</button>';
 }
 
 function renderGrid(map, view, el) {
@@ -453,8 +464,8 @@ function renderDayPane(map) {
   layoutDay(timed).forEach(x => {
     const top = x.s / 60 * HOUR_H, height = Math.max(20, (x.e - x.s) / 60 * HOUR_H - 2);
     const en = x.en;
-    h += `<button type="button" class="dp-ev${en.done ? ' done' : ''}" style="--c:${en.color};top:${top}px;height:${height}px;left:calc(48px + (100% - 54px) * ${x.col} / ${x.ncol});width:calc((100% - 54px) / ${x.ncol} - 2px)" data-kind="${en.kind}" data-id="${esc(en.id)}">` +
-      `<b>${esc((en.done ? '✓' : '') + en.title)}</b>${height > 34 ? `<small>${esc(en.start)}〜${esc(en.end || '')}</small>` : ''}</button>`;
+    h += `<button type="button" class="dp-ev${en.done ? ' done' : ''}${en.status === 'ng' ? ' ng' : ''}" style="--c:${en.color};top:${top}px;height:${height}px;left:calc(48px + (100% - 54px) * ${x.col} / ${x.ncol});width:calc((100% - 54px) / ${x.ncol} - 2px)" data-kind="${en.kind}" data-id="${esc(en.id)}">` +
+      `<b>${esc(markOf(en.status) + en.title)}</b>${height > 34 ? `<small>${esc(en.start)}〜${esc(en.end || '')}</small>` : ''}</button>`;
   });
   if (state.sel === today) {
     const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
@@ -483,10 +494,12 @@ function renderAgenda(map) {
   list.forEach(e => {
     if (e.kind === 'item') {
       const it = e.it;
-      h += `<button type="button" class="ag-row${it.done ? ' done' : ''}" style="--c:${e.color}" data-kind="item" data-id="${esc(it.id)}">` +
+      const st = statusOf(it);
+      h += `<div class="ag-item"><button type="button" class="ag-row${it.done ? ' done' : ''}${st === 'ng' ? ' ng' : ''}" style="--c:${e.color}" data-kind="item" data-id="${esc(it.id)}">` +
         `<span class="dot"></span><span class="ag-time">${timeText(e)}</span>` +
         `<span class="ag-main"><span class="ag-title">${esc(e.title)}</span><span class="ag-sub">${esc(CATS[it.type].label + '｜' + detailOf(it))}</span></span>` +
-        `<span class="badge ${it.sync}">${SYNC_LABEL[it.sync] || ''}</span></button>`;
+        `<span class="badge ${it.sync}">${SYNC_LABEL[it.sync] || ''}</span></button>` +
+        `<button type="button" class="chk ${st}" data-id="${esc(it.id)}" aria-label="実行チェック（いま：${STATUS_LABEL[st]}）">${markOf(st)}</button></div>`;
     } else {
       h += `<button type="button" class="ag-row ext" style="--c:${e.color}" data-kind="ext" data-id="${esc(e.id)}">` +
         `<span class="dot"></span><span class="ag-time">${timeText(e)}</span>` +
@@ -569,6 +582,18 @@ function renderSummary() {
     `<div class="big">${yen(total)}<small>${goal ? '/ ' + yen(goal) : ''}</small></div>` + fund +
     kv('今月の積み立て', (monthNet < 0 ? '−' : '') + yen(Math.abs(monthNet))));
 
+  // 実行チェック（今日までの予定）
+  const todayS = ymd(new Date());
+  const past = month.filter(i => i.date <= todayS);
+  const ok = past.filter(i => statusOf(i) === 'ok').length, ng = past.filter(i => statusOf(i) === 'ng').length;
+  const yet = past.length - ok - ng;
+  const rate = ok + ng ? Math.round(ok / (ok + ng) * 100) : null;
+  h += card('#1a73e8', '実行チェック',
+    `<div class="big">${rate == null ? '—' : rate + '%'}<small>実行できた割合</small></div>` +
+    (rate == null ? '' : bar(ok, ok + ng)) +
+    kv('できた', ok + '件') + kv('できなかった', ng + '件') +
+    (yet ? kv('まだチェックしていない', yet + '件') : ''));
+
   h += '</div>';
   if (!runGoal && !goalMin && !goal) h += '<p class="hint">右上の設定から目標を入れると、進み具合が表示されます。</p>';
   $('#summaryBox').innerHTML = h;
@@ -587,7 +612,7 @@ function openEditor(it, date, startTime) {
   } else {
     const type = 'other'; // 新しい予定は「その他」から始める
     const st0 = startTime || '', en0 = startTime ? pad(Math.min(23, Number(startTime.slice(0, 2)) + 1)) + startTime.slice(2) : '';
-    state.editing = { type, date: date || state.sel, title: '', start: st0, end: en0, memo: '', data: {}, done: date ? date < ymd(new Date()) : false, sync: defaultSync(type) };
+    state.editing = { type, date: date || state.sel, title: '', start: st0, end: en0, memo: '', data: {}, done: false, sync: defaultSync(type) };
   }
   const e = state.editing;
   $('#editTitle').textContent = e.id ? '予定を編集' : '予定を追加';
@@ -604,7 +629,7 @@ function openEditor(it, date, startTime) {
   $('#fStudyMin').value = d.min != null && e.type === 'study' ? d.min : '';
   $('#fAmount').value = d.amount != null ? d.amount : '';
   $('#fKind').value = d.kind || 'in';
-  $('#fDone').checked = !!e.done;
+  setStatusSeg(statusOf(e));
   $('#fMemo').value = e.memo || '';
   $('#delBtn').hidden = !e.id;
   $('#copyBtn').hidden = !e.id;
@@ -626,12 +651,43 @@ function setType(t, fromUser) {
   e.type = t;
   $$('#fType button').forEach(b => { b.classList.toggle('on', b.dataset.v === t); b.style.setProperty('--c', CATS[b.dataset.v].color); });
   $$('.type-fields').forEach(x => x.classList.toggle('on', x.dataset.type === t));
-  $('#doneLabel').textContent = CATS[t].done;
-  const mineNames = { run: '「ラン計画」', study: '「勉強計画」', money: '「資金計画」', other: '「マイプラン」' };
+    const mineNames = { run: '「ラン計画」', study: '「勉強計画」', money: '「資金計画」', other: '「マイプラン」' };
   $('#mineDesc').textContent = '自分専用の' + mineNames[t] + 'カレンダーに入れる（妻には見えない）';
   if (fromUser && !e.id) e.sync = defaultSync(t);
   const r = $(`input[name=sync][value=${e.sync}]`);
   if (r && !r.disabled) r.checked = true; else $('input[name=sync][value=mine]').checked = true;
+}
+
+function setStatusSeg(st) {
+  state.editStatus = st;
+  $$('#fStatus button').forEach(b => b.classList.toggle('on', b.dataset.v === st));
+}
+
+/* 1日の予定の丸ボタン：タップごとに まだ → できた → できなかった → まだ */
+async function cycleStatus(id) {
+  const orig = state.items.find(x => x.id === id);
+  if (!orig) return;
+  const next = { '': 'ok', ok: 'ng', ng: '' }[statusOf(orig)];
+  const it = JSON.parse(JSON.stringify(orig));
+  applyStatus(it, next);
+  it.calTitle = (markOf(next) ? markOf(next) + ' ' : '') + titleOf(it);
+  it.calDesc = calDesc(it);
+  const i = state.items.indexOf(orig);
+  state.items[i] = it; // 先に画面へ反映（待たせない）
+  render();
+  try {
+    const saved = await api('save', { item: it });
+    const j = state.items.findIndex(x => x.id === saved.id);
+    if (j >= 0) state.items[j] = saved;
+    LS.set(cacheKey(), { items: state.items, settings: state.settings });
+    render();
+    toast(next === 'ok' ? 'できた にしました' : next === 'ng' ? 'できなかった にしました' : 'チェックを外しました');
+  } catch (e) {
+    const j = state.items.findIndex(x => x.id === it.id);
+    if (j >= 0) state.items[j] = orig;
+    render();
+    toast('保存できませんでした：' + e.message);
+  }
 }
 
 function toggleTime() { $('#timeRow').hidden = $('#fAllDay').checked; }
@@ -650,10 +706,10 @@ function readEditor() {
   else if (e.type === 'study') e.data = { subject: $('#fSubject').value.trim(), min: val('#fStudyMin') };
   else if (e.type === 'money') e.data = { amount: val('#fAmount'), kind: $('#fKind').value };
   else e.data = {};
-  e.done = $('#fDone').checked;
+  applyStatus(e, state.editStatus || '');
   e.memo = $('#fMemo').value;
   e.sync = ($('input[name=sync]:checked') || {}).value || 'none';
-  e.calTitle = (e.done ? '✓ ' : '') + titleOf(e);
+  e.calTitle = (markOf(statusOf(e)) ? markOf(statusOf(e)) + ' ' : '') + titleOf(e);
   e.calDesc = calDesc(e);
   return e;
 }
@@ -689,7 +745,7 @@ function copyItem() {
   const src = JSON.parse(JSON.stringify(readEditor()));
   ['id', 'eventId', 'calId', 'updated', 'calTitle', 'calDesc'].forEach(k => delete src[k]);
   src.date = ymd(new Date());
-  src.done = true;
+  applyStatus(src, 'ok');
   $('#editor').close();
   openEditor(src);
   toast('コピーしました。内容を直して保存してください');
@@ -906,6 +962,8 @@ function bind() {
     openDay();
   };
   $('#agendaBox').onclick = e => {
+    const chk = e.target.closest('.chk');
+    if (chk) { cycleStatus(chk.dataset.id); return; }
     const row = e.target.closest('.ag-row');
     if (!row) return;
     $('#day').close();
@@ -957,6 +1015,7 @@ function bind() {
 
   // 入力画面
   $('#editForm').onsubmit = saveEditor;
+  $('#fStatus').onclick = e => { const b = e.target.closest('button'); if (b) setStatusSeg(b.dataset.v); };
   $('#fType').onclick = e => { const b = e.target.closest('button'); if (b) setType(b.dataset.v, true); };
   $('#fAllDay').onchange = toggleTime;
   ['#fDist', '#fMin', '#fSec'].forEach(id => { $(id).oninput = updatePace; });
