@@ -377,6 +377,7 @@ function render() {
   $('#demoBanner').hidden = !isDemo();
   renderFilters();
   const map = entriesByDay();
+  document.body.classList.toggle('is-week', isWeek());
   if (isWeek()) {
     renderWeek(map, state.wk, $('#grid'));
     const pw = addDays(state.wk, -7), nw = addDays(state.wk, 7);
@@ -446,23 +447,53 @@ function renderGrid(map, view, el) {
   el.innerHTML = h;
 }
 
-/* 週表示：1週間を7列で、その日の予定をすべて表示（時間つき・長いタイトルは折り返し） */
+/* 週表示：Googleカレンダーの週表示のように、時間の目盛りに沿って7日分を並べる */
+const WK_H = 44; // 1時間の高さ
+let wkScroll = null; // 時間の目盛りのスクロール位置（週を変えても同じ時間帯を見せる）
 function renderWeek(map, ws, el) {
   const today = ymd(new Date());
   el.classList.add('week');
-  el.style.setProperty('--weeks', 1);
-  let h = '';
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(ws, i), k = ymd(d), list = map[k] || [];
-    const cls = ['cell'];
+  el.style.removeProperty('--weeks');
+  const days = [...Array(7)].map((_, i) => addDays(ws, i));
+  let head = '<div class="wk-head"><span class="wk-gut"></span>';
+  let allDay = '<div class="wk-allday"><span class="wk-gut">終日</span>';
+  let cols = '';
+  let anyAllDay = false;
+  days.forEach(d => {
+    const k = ymd(d), list = map[k] || [];
+    const cls = ['wk-day'];
     if (k === state.sel) cls.push('sel');
     if (d.getDay() === 0) cls.push('sun');
     if (d.getDay() === 6) cls.push('sat');
-    h += `<div class="${cls.join(' ')}" data-date="${k}"><span class="num${k === today ? ' today' : ''}">${d.getDate()}</span>`;
-    list.forEach(e => { h += chipHtml(e); });
-    h += '</div>';
-  }
-  el.innerHTML = h;
+    head += `<button type="button" class="${cls.join(' ')}" data-date="${k}"><small>${WD[d.getDay()]}</small><span class="num${k === today ? ' today' : ''}">${d.getDate()}</span></button>`;
+    const ad = list.filter(e => !e.start);
+    if (ad.length) anyAllDay = true;
+    allDay += `<div class="wk-adcell${k === state.sel ? ' sel' : ''}" data-date="${k}">${ad.map(chipHtml).join('')}</div>`;
+    const timed = list.filter(e => e.start).map(e => {
+      const s0 = toMin(e.start);
+      let e0 = toMin(e.end);
+      if (e0 == null || e0 <= s0) e0 = s0 + 60;
+      return { en: e, s: s0, e: Math.min(e0, 24 * 60) };
+    }).filter(x => x.s != null);
+    let c = `<div class="wk-col${k === state.sel ? ' sel' : ''}" data-date="${k}">`;
+    layoutDay(timed).forEach(x => {
+      const top = x.s / 60 * WK_H, height = Math.max(18, (x.e - x.s) / 60 * WK_H - 2), en = x.en;
+      c += `<button type="button" class="dp-ev wk-ev${en.done ? ' done' : ''}${en.status === 'ng' ? ' ng' : ''}" style="--c:${en.color};top:${top}px;height:${height}px;left:calc(100% * ${x.col} / ${x.ncol});width:calc(100% / ${x.ncol} - 2px)" data-kind="${en.kind}" data-id="${esc(en.id)}">` +
+        `<b>${esc(markOf(en.status) + en.title)}</b>${height > 56 ? `<small>${esc(en.start)}</small>` : ''}</button>`;
+    });
+    if (k === today) { const n = new Date(); c += `<div class="wk-now" style="top:${(n.getHours() * 60 + n.getMinutes()) / 60 * WK_H}px"></div>`; }
+    cols += c + '</div>';
+  });
+  head += '</div>';
+  allDay += '</div>';
+  let hours = '';
+  for (let i = 1; i < 24; i++) hours += `<div class="wk-line" style="top:${i * WK_H}px"><span>${i}:00</span></div>`;
+  el.innerHTML = head + (anyAllDay ? allDay : '') +
+    `<div class="wk-scroll"><div class="wk-body" style="height:${24 * WK_H}px">${hours}<div class="wk-cols">${cols}</div></div></div>`;
+  const sc = el.querySelector('.wk-scroll');
+  if (wkScroll == null) wkScroll = Math.max(0, (ws <= new Date() && new Date() < addDays(ws, 7) ? new Date().getHours() * 60 - 120 : 7 * 60) / 60 * WK_H);
+  sc.scrollTop = wkScroll;
+  if (el.id === 'grid') sc.onscroll = () => { wkScroll = sc.scrollTop; };
 }
 
 /* ---------- 開いた画面：左側の「1日の予定」（時間ごと） ---------- */
@@ -1001,6 +1032,22 @@ function openEntry(kind, id) {
   else { const it = state.items.find(x => x.id === id); if (it) openEditor(it); }
 }
 
+function weekClick(e) {
+  const ev = e.target.closest('.wk-ev, .chip');
+  const box = e.target.closest('[data-date]'); if (!box) return;
+  state.sel = box.dataset.date;
+  if (ev) { render(); openEntry(ev.dataset.kind, ev.dataset.id); return; }
+  if (box.classList.contains('wk-col')) { // 空いている時間をタップ → その時刻から予定を追加
+    const y = e.clientY - box.getBoundingClientRect().top;
+    const h = Math.max(0, Math.min(23, Math.floor(y / WK_H)));
+    render();
+    openEditor(null, state.sel, pad(h) + ':00');
+    return;
+  }
+  if (isWide()) { render(); return; }
+  openDay();
+}
+
 function bind() {
   $('#prevBtn').onclick = () => slideTo(-1);
   $('#nextBtn').onclick = () => slideTo(1);
@@ -1024,6 +1071,7 @@ function bind() {
   };
   $('#grid').onclick = e => {
     if (Date.now() - swipedAt < 400) return;
+    if (isWeek()) { weekClick(e); return; }
     const chip = e.target.closest('.chip');
     const cell = e.target.closest('.cell'); if (!cell) return;
     const date = cell.dataset.date;
