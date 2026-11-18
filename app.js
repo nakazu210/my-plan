@@ -44,10 +44,17 @@ const state = {
   demoForced: false,
   view: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   sel: ymd(new Date()),
+  mode: LS.get('mp_mode', 'month') === 'week' ? 'week' : 'month', // 月表示／週表示
+  wk: null, // 週表示の週の始まり（日曜）
   items: [], events: [], settings: {}, calendars: [], sharedCalId: '', sharedCalIds: [],
   filters: Object.assign({ run: true, study: true, money: true, other: true, extMe: true, extWife: true }, LS.get('mp_filters', {})),
   editing: null,
 };
+const weekStart = d => addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -d.getDay());
+const monthOf = d => new Date(d.getFullYear(), d.getMonth(), 1);
+state.wk = weekStart(new Date());
+if (state.mode === 'week') state.view = monthOf(state.wk);
+const isWeek = () => state.mode === 'week';
 const isDemo = () => !state.cfg.apiUrl || state.demoForced;
 const needsLogin = () => !!state.cfg.apiUrl && !state.demoForced && !state.session && !state.cfg.token;
 const cacheKey = () => 'mp_cache_' + (isDemo() ? 'demo' : 'live');
@@ -355,16 +362,32 @@ function entriesByDay(events = state.events) {
   return out;
 }
 
+// その週の予定が入っている月のデータ（週の日曜が属する月の表示範囲に1週間まるごと含まれる）
+const eventsForWeek = ws => monthKey(monthOf(ws)) === monthKey(state.view) ? state.events : (evCache[monthKey(monthOf(ws))] || []);
 function render() {
   const f = state.view;
-  $('#monthTitle').textContent = f.getFullYear() + '年' + (f.getMonth() + 1) + '月';
+  if (isWeek()) {
+    const we = addDays(state.wk, 6);
+    $('#monthTitle').textContent = (state.wk.getMonth() + 1) + '/' + state.wk.getDate() + '〜' + (we.getMonth() + 1) + '/' + we.getDate();
+  } else {
+    $('#monthTitle').textContent = f.getFullYear() + '年' + (f.getMonth() + 1) + '月';
+  }
+  $('#prevBtn').setAttribute('aria-label', isWeek() ? '前の週' : '前の月');
+  $('#nextBtn').setAttribute('aria-label', isWeek() ? '次の週' : '次の月');
   $('#demoBanner').hidden = !isDemo();
   renderFilters();
   const map = entriesByDay();
-  renderGrid(map, state.view, $('#grid'));
-  const pv = new Date(f.getFullYear(), f.getMonth() - 1, 1), nv = new Date(f.getFullYear(), f.getMonth() + 1, 1);
-  renderGrid(entriesByDay(evCache[monthKey(pv)] || []), pv, $('#gridPrev'));
-  renderGrid(entriesByDay(evCache[monthKey(nv)] || []), nv, $('#gridNext'));
+  if (isWeek()) {
+    renderWeek(map, state.wk, $('#grid'));
+    const pw = addDays(state.wk, -7), nw = addDays(state.wk, 7);
+    renderWeek(entriesByDay(eventsForWeek(pw)), pw, $('#gridPrev'));
+    renderWeek(entriesByDay(eventsForWeek(nw)), nw, $('#gridNext'));
+  } else {
+    renderGrid(map, state.view, $('#grid'));
+    const pv = new Date(f.getFullYear(), f.getMonth() - 1, 1), nv = new Date(f.getFullYear(), f.getMonth() + 1, 1);
+    renderGrid(entriesByDay(evCache[monthKey(pv)] || []), pv, $('#gridPrev'));
+    renderGrid(entriesByDay(evCache[monthKey(nv)] || []), nv, $('#gridNext'));
+  }
   if ($('#day').open) renderAgenda(map);
   if (isWide()) renderDayPane(map);
   if ($('#sumDlg').open) renderSummary();
@@ -376,7 +399,9 @@ function renderFilters() {
     list.push({ k: 'extMe', label: '共有（自分）', color: extColor(true) });
     list.push({ k: 'extWife', label: '共有（妻）', color: extColor(false) });
   }
-  $('#filters').innerHTML = list.map(x =>
+  $('#filters').innerHTML =
+    `<span class="vseg"><button type="button" class="vbtn${isWeek() ? '' : ' on'}" data-mode="month">月</button><button type="button" class="vbtn${isWeek() ? ' on' : ''}" data-mode="week">週</button></span>` +
+    list.map(x =>
     `<button type="button" class="fchip${state.filters[x.k] ? '' : ' off'}" data-k="${x.k}" style="--c:${x.color}"><i></i>${esc(x.label)}</button>`
   ).join('');
 }
@@ -399,8 +424,10 @@ function renderGrid(map, view, el) {
   // マスの高さから、表示できる予定の数を計算（カレンダーを画面いっぱいに使う）
   const gridH = $('#grid').clientHeight || 500;
   const cellH = gridH / weeks;
-  const chipH = isWide() ? 20 : 17;
-  const max = Math.max(1, Math.floor((cellH - (isWide() ? 32 : 28)) / chipH));
+  const chipH = isWide() ? 18 : 14;      // 予定1件の高さ（すき間込み）
+  const room = cellH - (isWide() ? 30 : 23); // 日付の数字・余白を除いた高さ
+  const moreH = isWide() ? 14 : 12;      // 「他◯件」の行の高さ
+  el.classList.remove('week');
   el.style.setProperty('--weeks', weeks);
   let h = '';
   for (let i = 0; i < weeks * 7; i++) {
@@ -410,10 +437,29 @@ function renderGrid(map, view, el) {
     if (k === state.sel) cls.push('sel');
     if (d.getDay() === 0) cls.push('sun');
     if (d.getDay() === 6) cls.push('sat');
-    const shown = list.length > max ? max - 1 : list.length;
+    const shown = list.length * chipH <= room ? list.length : Math.max(0, Math.floor((room - moreH) / chipH));
     h += `<div class="${cls.join(' ')}" data-date="${k}"><span class="num${k === today ? ' today' : ''}">${d.getDate()}</span>`;
     list.slice(0, shown).forEach(e => { h += chipHtml(e); });
     if (list.length > shown) h += `<span class="more">他${list.length - shown}件</span>`;
+    h += '</div>';
+  }
+  el.innerHTML = h;
+}
+
+/* 週表示：1週間を7列で、その日の予定をすべて表示（時間つき・長いタイトルは折り返し） */
+function renderWeek(map, ws, el) {
+  const today = ymd(new Date());
+  el.classList.add('week');
+  el.style.setProperty('--weeks', 1);
+  let h = '';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(ws, i), k = ymd(d), list = map[k] || [];
+    const cls = ['cell'];
+    if (k === state.sel) cls.push('sel');
+    if (d.getDay() === 0) cls.push('sun');
+    if (d.getDay() === 6) cls.push('sat');
+    h += `<div class="${cls.join(' ')}" data-date="${k}"><span class="num${k === today ? ' today' : ''}">${d.getDate()}</span>`;
+    list.forEach(e => { h += chipHtml(e); });
     h += '</div>';
   }
   el.innerHTML = h;
@@ -727,8 +773,10 @@ async function saveEditor(ev) {
     LS.set(cacheKey(), { items: state.items, settings: state.settings });
     state.sel = saved.date;
     const sd = parse(saved.date);
-    const moved = sd.getFullYear() !== state.view.getFullYear() || sd.getMonth() !== state.view.getMonth();
-    if (moved) state.view = new Date(sd.getFullYear(), sd.getMonth(), 1);
+    state.wk = isWeek() ? weekStart(sd) : state.wk;
+    const nv = isWeek() ? monthOf(state.wk) : monthOf(sd);
+    const moved = monthKey(nv) !== monthKey(state.view);
+    if (moved) state.view = nv;
     $('#editor').close();
     render();
     if (moved) load();
@@ -882,6 +930,29 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 function setStatus(s) { $('#syncState').textContent = s; }
+function moveBy(n) {
+  if (!isWeek()) { moveMonth(n); return; }
+  state.wk = addDays(state.wk, 7 * n);
+  const sel = addDays(parse(state.sel), 7 * n), today = new Date();
+  state.sel = ymd(weekStart(today).getTime() === state.wk.getTime() ? today : (sel >= state.wk && sel <= addDays(state.wk, 6) ? sel : state.wk));
+  const nv = monthOf(state.wk);
+  const moved = monthKey(nv) !== monthKey(state.view);
+  if (moved) { state.view = nv; state.events = evCache[monthKey(nv)] || []; }
+  render();
+  if (moved) load();
+}
+function setMode(mode) {
+  if (mode === state.mode) return;
+  state.mode = mode;
+  LS.set('mp_mode', mode);
+  const sel = parse(state.sel);
+  state.wk = weekStart(sel);
+  const nv = isWeek() ? monthOf(state.wk) : monthOf(sel);
+  const moved = monthKey(nv) !== monthKey(state.view);
+  if (moved) { state.view = nv; state.events = evCache[monthKey(nv)] || []; }
+  render();
+  if (moved) load();
+}
 function moveMonth(n) {
   state.view = new Date(state.view.getFullYear(), state.view.getMonth() + n, 1);
   const sel = parse(state.sel);
@@ -913,7 +984,7 @@ function slideTo(n) {
     if (done) return;
     done = true;
     t.removeEventListener('transitionend', finish);
-    moveMonth(n);
+    moveBy(n);
     setTrack(0, false);
     sliding = false;
   };
@@ -936,7 +1007,8 @@ function bind() {
   $('#todayBtn').onclick = () => {
     const t = new Date();
     state.sel = ymd(t);
-    state.view = new Date(t.getFullYear(), t.getMonth(), 1);
+    state.wk = weekStart(t);
+    state.view = isWeek() ? monthOf(state.wk) : new Date(t.getFullYear(), t.getMonth(), 1);
     render(); load();
   };
   $('#reloadBtn').onclick = () => { loadConfig().then(load); };
@@ -944,6 +1016,7 @@ function bind() {
   $('#fab').onclick = () => openEditor(null, state.sel);
 
   $('#filters').onclick = e => {
+    const v = e.target.closest('.vbtn'); if (v) { setMode(v.dataset.mode); return; }
     const b = e.target.closest('.fchip'); if (!b) return;
     state.filters[b.dataset.k] = !state.filters[b.dataset.k];
     LS.set('mp_filters', state.filters);
@@ -956,8 +1029,8 @@ function bind() {
     const date = cell.dataset.date;
     state.sel = date;
     const d = parse(date);
-    if (d.getMonth() !== state.view.getMonth()) { state.view = new Date(d.getFullYear(), d.getMonth(), 1); load(); }
-    if (chip && isWide()) { render(); openEntry(chip.dataset.kind, chip.dataset.id); return; }
+    if (!isWeek() && d.getMonth() !== state.view.getMonth()) { state.view = new Date(d.getFullYear(), d.getMonth(), 1); load(); }
+    if (chip && (isWide() || isWeek())) { render(); openEntry(chip.dataset.kind, chip.dataset.id); return; }
     if (isWide()) { render(); return; } // 開いた画面では左の「1日の予定」に表示
     openDay();
   };
