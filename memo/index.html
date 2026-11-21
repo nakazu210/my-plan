@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="メモ">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-512.png">
+<title>メモ</title>
+<style>
+  :root {
+    --bg: #ffffff; --card: #f7f6f2; --text: #1b1b1b; --sub: #7d7a73; --line: #e7e4dc;
+    --pad: #fff4b8; --padline: #eedc80; --accent: #2a5bd7; --danger: #c8372d; --rec: #e5484d;
+    --bar: rgba(255,255,255,.92);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --kb: 0px;               /* キーボードの高さ(JSで更新) */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141414; --card: #1e1e1e; --text: #ececec; --sub: #9a978f; --line: #2d2d2d;
+      --pad: #37321a; --padline: #544e27; --accent: #7fa2ff; --bar: rgba(20,20,20,.92); }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  }
+
+  header { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; }
+  header h1 { font-size: 22px; margin: 0; }
+  .status { font-size: 12px; color: var(--sub); margin-left: auto; white-space: nowrap; }
+  .icon { background: none; border: none; color: var(--text); width: 40px; height: 40px; border-radius: 10px;
+    display: grid; place-items: center; cursor: pointer; }
+  .icon svg { width: 22px; height: 22px; }
+
+  /* ---------- スマホ(閉じた状態): 1列 ---------- */
+  .layout { padding: 0 16px calc(96px + var(--safe-b)); }
+  .composer { background: var(--pad); border-radius: 16px; padding: 12px 14px; border-top: 6px solid var(--padline); }
+  textarea {
+    width: 100%; min-height: 34vh; border: none; outline: none; resize: none; background: transparent;
+    color: var(--text); font: 18px/1.7 inherit; font-family: inherit; display: block;
+  }
+  .dtrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 14px; color: var(--sub); }
+  input[type=datetime-local] { font: 15px inherit; font-family: inherit; color: var(--text); background: transparent;
+    border: 1px solid var(--padline); border-radius: 10px; padding: 6px 8px; min-height: 38px; }
+  .hint { font-size: 13px; color: var(--sub); min-height: 1.2em; margin-top: 4px; }
+
+  .actionbar {
+    position: fixed; left: 0; right: 0; bottom: var(--kb); z-index: 10;
+    display: flex; gap: 10px; align-items: center;
+    padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + var(--safe-b)) max(16px, env(safe-area-inset-left));
+    background: var(--bar); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  body.kb-open .actionbar { padding-bottom: 10px; }
+  .btn { border: none; border-radius: 14px; min-height: 52px; padding: 0 18px; font: 700 17px inherit;
+    font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn svg { width: 22px; height: 22px; }
+  .mic { background: var(--card); color: var(--text); border: 1px solid var(--line); min-width: 64px; }
+  .mic.on { background: var(--rec); color: #fff; border-color: var(--rec); }
+  .ghost { background: transparent; color: var(--sub); border: 1px solid var(--line); }
+  .save { background: var(--accent); color: #fff; flex: 1; }
+
+  .listpane { margin-top: 18px; }
+  .search { width: 100%; font: 16px inherit; font-family: inherit; color: var(--text); background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 44px; }
+  .day { font-size: 13px; color: var(--sub); font-weight: 700; margin: 18px 2px 8px; display: flex; gap: 8px; align-items: center; }
+  .day::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .memo { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; }
+  .memo.editing { outline: 2px solid var(--accent); }
+  .meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .pending { color: #b07a00; }
+  .text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+  .del { margin-left: auto; background: none; border: none; color: var(--sub); font: 13px inherit; font-family: inherit;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .del.confirm { color: #fff; background: var(--danger); }
+  .empty { text-align: center; color: var(--sub); margin: 36px 0; font-size: 15px; }
+
+  /* ---------- 開いた状態(iPhone Duoを開いたとき・タブレット・PC): 2画面 ---------- */
+  @media (min-width: 700px) {
+    body { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+    .layout {
+      flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+      gap: var(--hinge, 20px); padding: 0 20px 0;
+    }
+    .listpane { order: 1; margin: 0; overflow-y: auto; padding-bottom: 24px; -webkit-overflow-scrolling: touch; }
+    .composer { order: 2; display: flex; flex-direction: column; min-height: 0; margin-bottom: calc(16px + var(--safe-b)); }
+    textarea { flex: 1; min-height: 0; }
+    .actionbar { position: static; background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+      border: none; padding: 10px 0 0; }
+    .search { position: sticky; top: 0; z-index: 1; }
+  }
+  /* 折り目(ヒンジ)がある端末では、折り目の幅だけ左右を離す */
+  @media (horizontal-viewport-segments: 2) {
+    :root { --hinge: calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0) + 20px); }
+  }
+
+  dialog { border: none; border-radius: 16px; padding: 18px; width: min(92vw, 420px); background: var(--bg); color: var(--text); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog label { display: block; font-size: 13px; color: var(--sub); margin: 12px 0 4px; }
+  dialog input { width: 100%; padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  dialog .btn { min-height: 44px; font-size: 15px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>メモ</h1>
+  <span class="status" id="status"></span>
+  <button class="icon" id="syncBtn" aria-label="同期">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>
+  </button>
+  <button class="icon" id="settingsBtn" aria-label="設定">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main class="layout">
+  <section class="composer">
+    <textarea id="text" placeholder="ここにメモを書く"></textarea>
+    <div class="dtrow">
+      <input type="datetime-local" id="dt" aria-label="日時">
+      <span id="editLabel"></span>
+    </div>
+    <div class="hint" id="hint"></div>
+    <div class="actionbar">
+      <button class="btn mic" id="micBtn" aria-label="音声入力">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <button class="btn ghost" id="cancelBtn" hidden>やめる</button>
+      <button class="btn save" id="saveBtn">保存</button>
+    </div>
+  </section>
+
+  <section class="listpane">
+    <input class="search" id="search" type="search" placeholder="検索">
+    <div id="list"></div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <h3 style="margin:0">設定</h3>
+  <label>合言葉</label>
+  <input id="keyInput" type="password" autocomplete="off">
+  <label>保存先のURL(通常は変更不要)</label>
+  <input id="urlInput" placeholder="https://script.google.com/macros/s/.../exec">
+  <div class="row">
+    <button class="btn ghost" id="closeSettings">閉じる</button>
+    <button class="btn save" style="flex:none" id="saveSettings">保存</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  // ▼ GASのウェブアプリURL(公開後にここへ入れる)
+  const DEFAULT_URL = '';
+
+  const $ = id => document.getElementById(id);
+  const LS = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+
+  let memos = LS.get('memo.list', []);
+  let queue = LS.get('memo.queue', []);
+  let cfg = LS.get('memo.cfg', { url: '', key: '' });
+  if (!cfg.url) cfg.url = DEFAULT_URL;
+  let editingId = null, dtTouched = false, syncing = false, confirmId = null, confirmTimer = null;
+
+  // ---------- 日時 ----------
+  const pad = n => String(n).padStart(2, '0');
+  const WEEK = ['日','月','火','水','木','金','土'];
+  const toLocalInput = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const dayLabel = d => {
+    const t = new Date(); t.setHours(0,0,0,0);
+    const x = new Date(d); x.setHours(0,0,0,0);
+    const diff = (t - x) / 864e5;
+    const base = `${d.getMonth()+1}/${d.getDate()}(${WEEK[d.getDay()]})`;
+    return diff === 0 ? `今日 ${base}` : diff === 1 ? `昨日 ${base}` : (d.getFullYear() === t.getFullYear() ? base : `${d.getFullYear()}/${base}`);
+  };
+  const timeLabel = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  function resetDt() { $('dt').value = toLocalInput(new Date()); dtTouched = false; }
+  $('dt').addEventListener('input', () => { dtTouched = true; });
+  setInterval(() => { if (!dtTouched && !editingId) $('dt').value = toLocalInput(new Date()); }, 20000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (!dtTouched && !editingId) $('dt').value = toLocalInput(new Date());
+      sync();
+    }
+  });
+
+  // ---------- キーボードが出たとき、ボタンをキーボードの上に出す ----------
+  const vv = window.visualViewport;
+  function fitKeyboard() {
+    if (!vv) return;
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', kb + 'px');
+    document.body.classList.toggle('kb-open', kb > 80);
+  }
+  if (vv) { vv.addEventListener('resize', fitKeyboard); vv.addEventListener('scroll', fitKeyboard); }
+
+  // ---------- 表示 ----------
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function render() {
+    const q = $('search').value.trim().toLowerCase();
+    const pendingIds = new Set(queue.map(o => o.memo.id));
+    const list = memos.filter(m => !q || m.text.toLowerCase().includes(q))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!list.length) {
+      $('list').innerHTML = `<div class="empty">${q ? '見つかりませんでした' : 'まだメモはありません'}</div>`;
+      return;
+    }
+    let html = '', last = '';
+    for (const m of list) {
+      const d = new Date(m.createdAt), day = dayLabel(d);
+      if (day !== last) { html += `<div class="day">${day}</div>`; last = day; }
+      const c = confirmId === m.id;
+      html += `<div class="memo${editingId === m.id ? ' editing' : ''}" data-id="${esc(m.id)}">
+        <div class="meta">${timeLabel(d)}${pendingIds.has(m.id) ? '<span class="pending">● 未送信</span>' : ''}
+          <button class="del${c ? ' confirm' : ''}" data-del="${esc(m.id)}">${c ? '本当に削除' : '削除'}</button></div>
+        <div class="text">${esc(m.text)}</div></div>`;
+    }
+    $('list').innerHTML = html;
+  }
+  $('search').addEventListener('input', render);
+  $('list').addEventListener('click', e => {
+    const del = e.target.closest('[data-del]');
+    if (del) { e.stopPropagation(); askDelete(del.dataset.del); return; }
+    const card = e.target.closest('.memo');
+    if (card) startEdit(card.dataset.id);
+  });
+
+  // ---------- 保存・編集・削除 ----------
+  function save() {
+    const text = $('text').value.trim();
+    if (!text) { $('text').focus(); return; }
+    stopMic();
+    const createdAt = new Date($('dt').value || Date.now()).toISOString();
+    if (editingId) {
+      const m = memos.find(x => x.id === editingId);
+      if (m) { m.text = text; m.createdAt = createdAt; enqueue('update', m); }
+    } else {
+      const m = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), createdAt, text };
+      memos.push(m); enqueue('add', m);
+    }
+    endEdit(); persist(); render(); sync();
+    $('text').blur();
+  }
+  function startEdit(id) {
+    const m = memos.find(x => x.id === id);
+    if (!m) return;
+    editingId = id;
+    $('text').value = m.text;
+    $('dt').value = toLocalInput(new Date(m.createdAt));
+    $('editLabel').textContent = '編集中';
+    $('saveBtn').textContent = '更新';
+    $('cancelBtn').hidden = false;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    $('text').focus();
+  }
+  function endEdit() {
+    editingId = null;
+    $('text').value = '';
+    $('editLabel').textContent = '';
+    $('saveBtn').textContent = '保存';
+    $('cancelBtn').hidden = true;
+    resetDt(); render();
+  }
+  function askDelete(id) {
+    if (confirmId !== id) {
+      confirmId = id; render();
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => { confirmId = null; render(); }, 4000);
+      return;
+    }
+    confirmId = null; clearTimeout(confirmTimer);
+    memos = memos.filter(m => m.id !== id);
+    enqueue('delete', { id });
+    if (editingId === id) endEdit();
+    persist(); render(); sync();
+  }
+  function enqueue(action, memo) {
+    const copy = { ...memo };
+    const i = queue.findIndex(o => o.memo.id === memo.id && o.action === 'add');
+    if (i !== -1 && action === 'update') { queue[i].memo = copy; return; }
+    if (i !== -1 && action === 'delete') { queue = queue.filter(o => o.memo.id !== memo.id); return; }
+    queue.push({ action, memo: copy });
+  }
+  function persist() { LS.set('memo.list', memos); LS.set('memo.queue', queue); }
+
+  $('saveBtn').addEventListener('click', save);
+  $('cancelBtn').addEventListener('click', endEdit);
+  $('text').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
+  });
+
+  // ---------- 同期 ----------
+  const setStatus = s => { $('status').textContent = s; };
+  async function sync() {
+    if (!cfg.url || !cfg.key) { setStatus('設定が必要です'); return; }
+    if (syncing) return;
+    if (!navigator.onLine) { setStatus(queue.length ? `オフライン(未送信${queue.length})` : 'オフライン'); return; }
+    syncing = true; setStatus('同期中…');
+    try {
+      while (queue.length) {
+        const op = queue[0];
+        const res = await fetch(cfg.url, { method: 'POST', body: JSON.stringify({ key: cfg.key, action: op.action, memo: op.memo }) });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'error');
+        queue.shift(); persist();
+      }
+      const res = await fetch(cfg.url + '?key=' + encodeURIComponent(cfg.key));
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'error');
+      memos = data.memos; persist(); render();
+      setStatus('同期済み ' + timeLabel(new Date()));
+    } catch (err) {
+      setStatus(err.message === 'unauthorized' ? '合言葉が違います' : `同期エラー${queue.length ? `(未送信${queue.length})` : ''}`);
+      render();
+    } finally { syncing = false; }
+  }
+  $('syncBtn').addEventListener('click', sync);
+  window.addEventListener('online', sync);
+  setInterval(() => { if (document.visibilityState === 'visible') sync(); }, 60000);
+
+  // ---------- 設定 ----------
+  function openSettings() { $('keyInput').value = cfg.key; $('urlInput').value = cfg.url; $('settings').showModal(); }
+  $('settingsBtn').addEventListener('click', openSettings);
+  $('closeSettings').addEventListener('click', () => $('settings').close());
+  $('saveSettings').addEventListener('click', () => {
+    cfg = { url: $('urlInput').value.trim() || DEFAULT_URL, key: $('keyInput').value.trim() };
+    LS.set('memo.cfg', cfg); $('settings').close(); sync();
+  });
+
+  // ---------- 音声入力 ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const isIOS = /iPhone|iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const fallback = isIOS ? 'キーボードのマイクボタンを押して話してください。'
+    : /Mac/.test(navigator.platform) ? 'Macは「fn」キーを2回押すと音声入力できます。' : 'Windowsは「Windowsキー + H」で音声入力できます。';
+  let rec = null, listening = false, baseText = '';
+  function stopMic() { if (rec && listening) rec.stop(); }
+  function micUI(on) {
+    listening = on; $('micBtn').classList.toggle('on', on);
+    $('hint').textContent = on ? '聞き取り中…もう一度押すと止まります' : ($('hint').textContent.startsWith('聞き取り中') ? '' : $('hint').textContent);
+  }
+  $('micBtn').addEventListener('click', () => {
+    if (!SR) { $('hint').textContent = fallback; $('text').focus(); return; }
+    if (listening) { rec.stop(); return; }
+    rec = new SR(); rec.lang = 'ja-JP'; rec.interimResults = true; rec.continuous = true;
+    baseText = $('text').value;
+    if (baseText && !baseText.endsWith('\n')) baseText += '\n';
+    rec.onresult = e => {
+      let fin = '', interim = '';
+      for (let i = 0; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) fin += t; else interim += t;
+      }
+      $('text').value = baseText + fin + interim;
+    };
+    rec.onstart = () => micUI(true);
+    rec.onend = () => micUI(false);
+    rec.onerror = e => { micUI(false); $('hint').textContent = (e.error === 'not-allowed' ? 'マイクが許可されていません。' : '音声入力が使えませんでした。') + fallback; };
+    try { rec.start(); } catch { $('hint').textContent = fallback; }
+  });
+
+  // ---------- 起動 ----------
+  resetDt(); render(); fitKeyboard();
+  if (!cfg.key) { setStatus('設定が必要です'); openSettings(); } else sync();
+})();
+</script>
+</body>
+</html>
